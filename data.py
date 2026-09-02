@@ -22,7 +22,7 @@ SUBJECTS = {
         "classroom": "https://classroom.google.com/c/ODc2NTQ3Mjk0NTMx?cjc=42m7a3h6"
     },
     "Конструкційні та електротехнічні матеріали": {
-        "teacher": "Віктор Лиманченко",
+        "teacher": "Лиманченко Віктор Павлович",
         "zoom": "https://us05web.zoom.us/j/88667130665?pwd=ZU9aSTBENTJRUm84WDFLb1VyMFNvZz09",
         "classroom": "https://classroom.google.com/c/zesv5q3"
     },
