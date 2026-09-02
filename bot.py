@@ -113,7 +113,7 @@ def send_welcome(message):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     markup.row("📅 Сегодня", "🔮 Завтра", "🗓 На неделю")
     markup.row("📝 Домашка (Classroom)", "⏰ Звонки")
-    markup.row("🎲 Кто отвечает?", "👥 Список группы")
+    markup.row("🧹 Кто дежурит?", "👥 Список группы")
     markup.row("📚 Предметы", "👨‍🏫 Преподаватели", "🔔 Уведомления")
     bot.send_message(
         message.chat.id,
@@ -140,10 +140,10 @@ def send_calls(message):
         text += f"{num} пара: {times['start']} - {times['end']}\n"
     bot.send_message(message.chat.id, text, parse_mode="Markdown")
 
-@bot.message_handler(func=lambda message: message.text in ["🎲 Кто отвечает?", "кто", "хто"])
+@bot.message_handler(func=lambda message: message.text in ["🧹 Кто дежурит?", "дежурный", "черговий", "кто дежурит", "хто чергує"])
 def random_student(message):
     chosen = random.choice(STUDENTS)
-    bot.send_message(message.chat.id, f"🎲 Сегодня отвечает: *{chosen}*! 🎯", parse_mode="Markdown")
+    bot.send_message(message.chat.id, f"🧹 Сегодня дежурит: *{chosen}*! 🧽", parse_mode="Markdown")
 
 @bot.message_handler(func=lambda message: message.text == "👥 Список группы")
 def send_group_list(message):
