@@ -1,6 +1,7 @@
 import os
 import json
 from datetime import datetime
+import pytz
 import telebot
 from telebot import types
 from flask import Flask, request
@@ -11,7 +12,7 @@ TOKEN = os.environ.get("BOT_TOKEN")
 bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
 
-# Постоянное хранение подписчиков в файле
+# Хранение подписчиков в файле
 SUBSCRIBERS_FILE = "subscribers.json"
 
 def load_subscribers():
@@ -32,7 +33,7 @@ def save_subscribers(subs):
 
 subscribed_users = load_subscribers()
 
-# Словарь быстрых слов для поиска предметов
+# Словарь синонимов предметов
 ALIASES = {
     "укр": "Українська мова та література",
     "мова": "Українська мова та література",
@@ -47,14 +48,10 @@ ALIASES = {
     "мат": "Математика",
     "матем": "Математика",
     "математика": "Математика",
-    "алгебра": "Математика",
-    "геометрия": "Математика",
     "англ": "Англійська мова",
     "английский": "Англійська мова",
-    "english": "Англійська мова",
     "био": "Біологія і Екологія",
     "биология": "Біологія і Екологія",
-    "экология": "Біологія і Екологія",
     "право": "Правознавство",
     "правоведение": "Правознавство",
     "история": "Історія 11 класс",
@@ -64,11 +61,21 @@ ALIASES = {
     "кэм": "Конструкційні та електротехнічні матеріали"
 }
 
-def get_subject_info_text(subject_name):
+DAYS_UA = {
+    "Monday": "Понеділок",
+    "Tuesday": "Вівторок",
+    "Wednesday": "Середа",
+    "Thursday": "Четвер",
+    "Friday": "П'ятниця",
+    "Saturday": "Субота",
+    "Sunday": "Неділя"
+}
+
+def get_subject_info(subject_name):
     data = SUBJECTS.get(subject_name)
     if not data:
         return None, None
-    text = f"📚 *{subject_name}*\n👨‍🏫 Преподаватель: {data['teacher']}"
+    text = f"📚 *{subject_name}*\n👨‍🏫 Выкладач: {data['teacher']}"
     markup = types.InlineKeyboardMarkup()
     if data.get("zoom"):
         markup.add(types.InlineKeyboardButton("🎥 Zoom", url=data["zoom"]))
@@ -95,7 +102,7 @@ def send_welcome(message):
     markup.row("👨‍🏫 Преподаватели", "🔔 Включить/выключить уведомления")
     bot.send_message(
         message.chat.id,
-        "Привет! Я бот группы Е-21.\nМожешь использовать меню или просто написать название предмета (например: 'укр', 'матем', 'физика'), чтобы получить ссылку!",
+        "Привет! Я бот группы Е-21.\nВыбирай нужную кнопку в меню или просто напиши название предмета (например, 'укр', 'матем', 'физика'), чтобы получить ссылку!",
         reply_markup=markup
     )
 
@@ -109,34 +116,110 @@ def toggle_notifications(message):
     else:
         subscribed_users.add(user_id)
         save_subscribers(subscribed_users)
-        bot.send_message(user_id, "🔔 Уведомления включены! Теперь ты будешь получать ссылки перед парами.")
+        bot.send_message(user_id, "🔔 Уведомления включены!")
 
-# Обработка коротких названий предметов
+@bot.message_handler(func=lambda message: message.text == "⏰ Расписание звонков")
+def send_calls(message):
+    text = "⏰ *Розклад дзвінків:*\n\n"
+    for num, times in CALLS.items():
+        text += f"{num} пара: {times['start']} - {times['end']}\n"
+    bot.send_message(message.chat.id, text, parse_mode="Markdown")
+
+@bot.message_handler(func=lambda message: message.text == "📚 Предметы")
+def send_subjects(message):
+    markup = types.InlineKeyboardMarkup()
+    for name in SUBJECTS.keys():
+        markup.add(types.InlineKeyboardButton(name, callback_data=f"sub_{name}"))
+    bot.send_message(message.chat.id, "Обери предмет:", reply_markup=markup)
+
+@bot.message_handler(func=lambda message: message.text == "👨‍🏫 Преподаватели")
+def send_teachers(message):
+    text = "👨‍🏫 *Список викладачів:*\n\n"
+    for name, data in SUBJECTS.items():
+        text += f"• *{name}*: {data['teacher']}\n"
+    bot.send_message(message.chat.id, text, parse_mode="Markdown")
+
+@bot.message_handler(func=lambda message: message.text == "📅 Расписание на сегодня")
+def send_today_schedule(message):
+    tz = pytz.timezone("Europe/Kyiv")
+    today = datetime.now(tz).strftime("%A")
+    day_ua = DAYS_UA.get(today, today)
+    
+    day_schedule = SCHEDULE.get(today, {})
+    if not day_schedule:
+        bot.send_message(message.chat.id, f"📅 *Расписание на сегодня ({day_ua}):*\nСьогодні пар немає! 🎉", parse_mode="Markdown")
+        return
+    
+    text = f"📅 *Расписание на сегодня ({day_ua}):*\n\n"
+    for num, subject in day_schedule.items():
+        time_info = CALLS.get(num, {})
+        time_str = f"({time_info.get('start')} - {time_info.get('end')})" if time_info else ""
+        text += f"*{num}. {subject}* {time_str}\n"
+    bot.send_message(message.chat.id, text, parse_mode="Markdown")
+
+@bot.message_handler(func=lambda message: message.text == "🗓 Расписание на неделю")
+def send_week_schedule(message):
+    text = "🗓 *Розклад на тиждень:*\n\n"
+    for day_eng, day_ua in DAYS_UA.items():
+        if day_eng in SCHEDULE and SCHEDULE[day_eng]:
+            text += f"📌 *{day_ua}:*\n"
+            for num, subject in SCHEDULE[day_eng].items():
+                text += f"  {num}. {subject}\n"
+            text += "\n"
+    if text == "🗓 *Розклад на тиждень:*\n\n":
+        text += "Розклад порожній."
+    bot.send_message(message.chat.id, text, parse_mode="Markdown")
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("sub_"))
+def callback_subject(call):
+    sub_name = call.data.replace("sub_", "")
+    info_text, markup = get_subject_info(sub_name)
+    if info_text:
+        bot.send_message(call.message.chat.id, info_text, parse_mode="Markdown", reply_markup=markup)
+
+# Поиск по текстовым сокращениям
 @bot.message_handler(func=lambda message: True)
-def handle_text(message):
-    text_clean = message.text.strip().lower()
+def handle_custom_text(message):
+    clean_text = message.text.strip().lower()
+    matched = ALIASES.get(clean_text)
     
-    # Поиск по словарю сокращений
-    matched_subject = ALIASES.get(text_clean)
-    
-    # Если прямого совпадения нет, ищем частичное
-    if not matched_subject:
-        for key, full_name in ALIASES.items():
-            if key in text_clean:
-                matched_subject = full_name
+    if not matched:
+        for key, full in ALIASES.items():
+            if key in clean_text:
+                matched = full
                 break
-
-    if matched_subject:
-        info_text, reply_markup = get_subject_info_text(matched_subject)
+                
+    if matched:
+        info_text, markup = get_subject_info(matched)
         if info_text:
-            bot.send_message(message.chat.id, info_text, parse_mode="Markdown", reply_markup=reply_markup)
+            bot.send_message(message.chat.id, info_text, parse_mode="Markdown", reply_markup=markup)
             return
 
-    # Если предмет не найден — стандартный ответ
-    if message.text == "📅 Расписание на сегодня":
-        bot.send_message(message.chat.id, "Функция расписания работает по меню.")
-    else:
-        bot.send_message(message.chat.id, "Я не понял запрос. Напиши сокращенное название предмета (например: 'укр', 'матем', 'физика') или воспользуйся меню.")
+    bot.send_message(message.chat.id, "Я не зрозумів запит. Напиши назву предмета (наприклад: 'укр', 'матем', 'фізика') або скористайся меню.")
+
+# Планировщик уведомлений
+def check_and_send_notifications():
+    tz = pytz.timezone("Europe/Kyiv")
+    now = datetime.now(tz)
+    today = now.strftime("%A")
+    current_time = now.strftime("%H:%M")
+
+    day_schedule = SCHEDULE.get(today, {})
+    for num, subject_name in day_schedule.items():
+        call_info = CALLS.get(num)
+        if call_info and call_info["start"] == current_time:
+            info_text, markup = get_subject_info(subject_name)
+            if info_text:
+                msg = f"🔔 *Пара починається!*\n\n{info_text}"
+                for user_id in list(subscribed_users):
+                    try:
+                        bot.send_message(user_id, msg, parse_mode="Markdown", reply_markup=markup)
+                    except Exception:
+                        pass
+
+scheduler = BackgroundScheduler(timezone="Europe/Kyiv")
+scheduler.add_job(check_and_send_notifications, "interval", minutes=1)
+scheduler.start()
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
