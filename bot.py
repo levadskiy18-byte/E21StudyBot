@@ -1,5 +1,6 @@
 import os
 import json
+import random
 from datetime import datetime, timezone, timedelta
 import telebot
 from telebot import types
@@ -11,8 +12,19 @@ TOKEN = os.environ.get("BOT_TOKEN")
 bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
 
-# Хранение подписчиков в файле
 SUBSCRIBERS_FILE = "subscribers.json"
+
+STUDENTS = [
+    "Болтенков Кирило", "Будко Микола", "Буцьківський Антон", "Веклич Олександр",
+    "Воротніков Микола", "Гунбін Дмитро", "Дрінь Дмитро", "Желєзняк Владислав",
+    "Задорожний Іван", "Кабанець Олексій", "Кищак Михайло", "Козаков Платон",
+    "Конова Альбіна", "Корінєв Андрій", "Кравцов Олександр", "Кривозуб Олександр",
+    "Лазаренко Віталій", "Лахмієнко Микола", "Левадний Дмитро", "Левадський Олександр",
+    "Літовщик Владислав", "Ломака Артем", "Макеєв Максим", "Мухортов Антон",
+    "Остапенко Максим", "Перепелиця Артур", "Плахотній Станіслав", "Порошин Єгор",
+    "Репринцев Владислав", "Семак Іван", "Скидан Юрій", "Суржко Валерій",
+    "Сябро Лев", "Танцюра Даріна", "Тертишник Василь", "Тюпа Євген"
+]
 
 def load_subscribers():
     if os.path.exists(SUBSCRIBERS_FILE):
@@ -32,7 +44,6 @@ def save_subscribers(subs):
 
 subscribed_users = load_subscribers()
 
-# Словарь синонимов предметов
 ALIASES = {
     "укр": "Українська мова та література",
     "мова": "Українська мова та література",
@@ -83,7 +94,6 @@ def get_subject_info(subject_name):
     return text, markup
 
 def get_kyiv_time():
-    # Настройка Киевского времени UTC+3
     kyiv_tz = timezone(timedelta(hours=3))
     return datetime.now(kyiv_tz)
 
@@ -101,16 +111,17 @@ def webhook():
 @bot.message_handler(commands=["start"])
 def send_welcome(message):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.row("📅 Расписание на сегодня", "🗓 Расписание на неделю")
-    markup.row("⏰ Расписание звонков", "📚 Предметы")
-    markup.row("👨‍🏫 Преподаватели", "🔔 Включить/выключить уведомления")
+    markup.row("📅 Сегодня", "🔮 Завтра", "🗓 На неделю")
+    markup.row("📝 Домашка (Classroom)", "⏰ Звонки")
+    markup.row("🎲 Кто отвечает?", "👥 Список группы")
+    markup.row("📚 Предметы", "👨‍🏫 Преподаватели", "🔔 Уведомления")
     bot.send_message(
         message.chat.id,
-        "Привет! Я бот группы Е-21.\nВыбирай нужную кнопку в меню или просто напиши название предмета (например, 'укр', 'матем', 'физика'), чтобы получить ссылку!",
+        "Привет! Я бот группы Е-21.\nИспользуй меню ниже или напиши назву предмета!",
         reply_markup=markup
     )
 
-@bot.message_handler(func=lambda message: message.text == "🔔 Включить/выключить уведомления")
+@bot.message_handler(func=lambda message: message.text == "🔔 Уведомления")
 def toggle_notifications(message):
     user_id = message.chat.id
     if user_id in subscribed_users:
@@ -122,12 +133,32 @@ def toggle_notifications(message):
         save_subscribers(subscribed_users)
         bot.send_message(user_id, "🔔 Уведомления включены!")
 
-@bot.message_handler(func=lambda message: message.text == "⏰ Расписание звонков")
+@bot.message_handler(func=lambda message: message.text == "⏰ Звонки")
 def send_calls(message):
     text = "⏰ *Розклад дзвінків:*\n\n"
     for num, times in CALLS.items():
         text += f"{num} пара: {times['start']} - {times['end']}\n"
     bot.send_message(message.chat.id, text, parse_mode="Markdown")
+
+@bot.message_handler(func=lambda message: message.text in ["🎲 Кто отвечает?", "кто", "хто"])
+def random_student(message):
+    chosen = random.choice(STUDENTS)
+    bot.send_message(message.chat.id, f"🎲 Сегодня отвечает: *{chosen}*! 🎯", parse_mode="Markdown")
+
+@bot.message_handler(func=lambda message: message.text == "👥 Список группы")
+def send_group_list(message):
+    text = "👥 *Cписок группы Е-21 (36 студентов):*\n\n"
+    for idx, student in enumerate(STUDENTS, 1):
+        text += f"{idx}. {student}\n"
+    bot.send_message(message.chat.id, text, parse_mode="Markdown")
+
+@bot.message_handler(func=lambda message: message.text == "📝 Домашка (Classroom)")
+def send_homework_links(message):
+    markup = types.InlineKeyboardMarkup()
+    for name, data in SUBJECTS.items():
+        if data.get("classroom"):
+            markup.add(types.InlineKeyboardButton(f"📖 {name}", url=data["classroom"]))
+    bot.send_message(message.chat.id, "📝 *Выбери предмет, чтобы открыть Google Classroom:*", parse_mode="Markdown", reply_markup=markup)
 
 @bot.message_handler(func=lambda message: message.text == "📚 Предметы")
 def send_subjects(message):
@@ -143,7 +174,7 @@ def send_teachers(message):
         text += f"• *{name}*: {data['teacher']}\n"
     bot.send_message(message.chat.id, text, parse_mode="Markdown")
 
-@bot.message_handler(func=lambda message: message.text == "📅 Расписание на сегодня")
+@bot.message_handler(func=lambda message: message.text == "📅 Сегодня")
 def send_today_schedule(message):
     now = get_kyiv_time()
     today = now.strftime("%A")
@@ -161,7 +192,25 @@ def send_today_schedule(message):
         text += f"*{num}. {subject}* {time_str}\n"
     bot.send_message(message.chat.id, text, parse_mode="Markdown")
 
-@bot.message_handler(func=lambda message: message.text == "🗓 Расписание на неделю")
+@bot.message_handler(func=lambda message: message.text == "🔮 Завтра")
+def send_tomorrow_schedule(message):
+    tomorrow_dt = get_kyiv_time() + timedelta(days=1)
+    tomorrow = tomorrow_dt.strftime("%A")
+    day_ua = DAYS_UA.get(tomorrow, tomorrow)
+    
+    day_schedule = SCHEDULE.get(tomorrow, {})
+    if not day_schedule:
+        bot.send_message(message.chat.id, f"🔮 *Расписание на завтра ({day_ua}):*\nЗавтра пар немає! 🎉", parse_mode="Markdown")
+        return
+    
+    text = f"🔮 *Расписание на завтра ({day_ua}):*\n\n"
+    for num, subject in day_schedule.items():
+        time_info = CALLS.get(num, {})
+        time_str = f"({time_info.get('start')} - {time_info.get('end')})" if time_info else ""
+        text += f"*{num}. {subject}* {time_str}\n"
+    bot.send_message(message.chat.id, text, parse_mode="Markdown")
+
+@bot.message_handler(func=lambda message: message.text == "🗓 На неделю")
 def send_week_schedule(message):
     text = "🗓 *Розклад на тиждень:*\n\n"
     for day_eng, day_ua in DAYS_UA.items():
@@ -181,12 +230,26 @@ def callback_subject(call):
     if info_text:
         bot.send_message(call.message.chat.id, info_text, parse_mode="Markdown", reply_markup=markup)
 
-# Поиск по текстовым сокращениям
 @bot.message_handler(func=lambda message: True)
 def handle_custom_text(message):
     clean_text = message.text.strip().lower()
-    matched = ALIASES.get(clean_text)
     
+    if clean_text in ["сколько", "пара", "перерыв"]:
+        now = get_kyiv_time()
+        now_minutes = now.hour * 60 + now.minute
+        for num, times in CALLS.items():
+            sh, sm = map(int, times["start"].split(":"))
+            eh, em = map(int, times["end"].split(":"))
+            start_m = sh * 60 + sm
+            end_m = eh * 60 + em
+            if start_m <= now_minutes < end_m:
+                rem = end_m - now_minutes
+                bot.send_message(message.chat.id, f"⏳ Сейчас идёт *{num} пара*. До конца осталось *{rem} мин*.", parse_mode="Markdown")
+                return
+        bot.send_message(message.chat.id, "☕️ Сейчас нет пар или идет перерыв!", parse_mode="Markdown")
+        return
+
+    matched = ALIASES.get(clean_text)
     if not matched:
         for key, full in ALIASES.items():
             if key in clean_text:
@@ -199,9 +262,8 @@ def handle_custom_text(message):
             bot.send_message(message.chat.id, info_text, parse_mode="Markdown", reply_markup=markup)
             return
 
-    bot.send_message(message.chat.id, "Я не зрозумів запит. Напиши назву предмета (наприклад: 'укр', 'матем', 'фізика') або скористайся меню.")
+    bot.send_message(message.chat.id, "Я не понял запрос. Напиши предмет (например: 'укр', 'матем') или используй меню.")
 
-# Планировщик уведомлений
 def check_and_send_notifications():
     now = get_kyiv_time()
     today = now.strftime("%A")
@@ -213,7 +275,7 @@ def check_and_send_notifications():
         if call_info and call_info["start"] == current_time:
             info_text, markup = get_subject_info(subject_name)
             if info_text:
-                msg = f"🔔 *Пара починається!*\n\n{info_text}"
+                msg = f"🔔 *Пара начинается!*\n\n{info_text}"
                 for user_id in list(subscribed_users):
                     try:
                         bot.send_message(user_id, msg, parse_mode="Markdown", reply_markup=markup)
