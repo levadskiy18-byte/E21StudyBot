@@ -1,7 +1,6 @@
 import os
 import json
-from datetime import datetime
-import pytz
+from datetime import datetime, timezone, timedelta
 import telebot
 from telebot import types
 from flask import Flask, request
@@ -83,6 +82,11 @@ def get_subject_info(subject_name):
         markup.add(types.InlineKeyboardButton("📚 Google Classroom", url=data["classroom"]))
     return text, markup
 
+def get_kyiv_time():
+    # Настройка Киевского времени UTC+3
+    kyiv_tz = timezone(timedelta(hours=3))
+    return datetime.now(kyiv_tz)
+
 @app.route("/")
 def index():
     return "Bot is running!", 200
@@ -141,8 +145,8 @@ def send_teachers(message):
 
 @bot.message_handler(func=lambda message: message.text == "📅 Расписание на сегодня")
 def send_today_schedule(message):
-    tz = pytz.timezone("Europe/Kyiv")
-    today = datetime.now(tz).strftime("%A")
+    now = get_kyiv_time()
+    today = now.strftime("%A")
     day_ua = DAYS_UA.get(today, today)
     
     day_schedule = SCHEDULE.get(today, {})
@@ -199,8 +203,7 @@ def handle_custom_text(message):
 
 # Планировщик уведомлений
 def check_and_send_notifications():
-    tz = pytz.timezone("Europe/Kyiv")
-    now = datetime.now(tz)
+    now = get_kyiv_time()
     today = now.strftime("%A")
     current_time = now.strftime("%H:%M")
 
@@ -217,7 +220,7 @@ def check_and_send_notifications():
                     except Exception:
                         pass
 
-scheduler = BackgroundScheduler(timezone="Europe/Kyiv")
+scheduler = BackgroundScheduler()
 scheduler.add_job(check_and_send_notifications, "interval", minutes=1)
 scheduler.start()
 
