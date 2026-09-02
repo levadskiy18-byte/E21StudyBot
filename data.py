@@ -1,106 +1,111 @@
-CALLS = {
-    "1": {"start": "08:00", "end": "09:35"},
-    "2": {"start": "09:45", "end": "11:20"},
-    "3": {"start": "12:00", "end": "13:35"},
-    "4": {"start": "13:45", "end": "15:20"}
+# ==============================
+# ПОИСК ПРЕДМЕТА ПО СООБЩЕНИЮ
+# ==============================
+
+ALIASES = {
+
+    # Українська мова
+    "укр": "Українська мова та література",
+    "укр мова": "Українська мова та література",
+    "українська": "Українська мова та література",
+    "українська мова": "Українська мова та література",
+    "мова": "Українська мова та література",
+    "література": "Українська мова та література",
+
+    # Фізичне виховання
+    "фізра": "Виховні години та фізичне виховання",
+    "физра": "Виховні години та фізичне виховання",
+    "фізкультура": "Виховні години та фізичне виховання",
+    "физкультура": "Виховні години та фізичне виховання",
+    "фізичне": "Виховні години та фізичне виховання",
+    "виховна": "Виховні години та фізичне виховання",
+
+    # Фізика
+    "фізика": "Фізика",
+    "физика": "Фізика",
+    "фіз": "Фізика",
+    "физ": "Фізика",
+
+    # Математика
+    "матем": "Математика",
+    "математика": "Математика",
+    "мат": "Математика",
+
+    # Англійська
+    "англ": "Англійська мова",
+    "англійська": "Англійська мова",
+    "английский": "Англійська мова",
+    "англ мова": "Англійська мова",
+
+    # Біологія
+    "біо": "Біологія і екологія",
+    "біологія": "Біологія і екологія",
+    "био": "Біологія і екологія",
+    "биология": "Біологія і екологія",
+
+    # Правознавство
+    "право": "Правознавство",
+    "правознавство": "Правознавство",
+
+    # Матеріали
+    "матеріали": "Конструкційні та електротехнічні матеріали",
+    "материалы": "Конструкційні та електротехнічні матеріали",
+    "кем": "Конструкційні та електротехнічні матеріали",
+
+    # Історія
+    "історія": "Історія 11 клас",
+    "история": "Історія 11 клас"
 }
 
 
-SUBJECTS = {
+@bot.message_handler(
+    func=lambda message: True,
+    content_types=["text"]
+)
+def handle_subject_search(message):
 
-    "Українська мова та література": {
-        "teacher": "Бречко Олена Миколаївна",
-        "zoom": "https://us04web.zoom.us/j/5546658153?pwd=eUR0cnF2Y3pIUHozeHhjV09XOU9OQT09",
-        "classroom": "https://classroom.google.com/c/ODc2NDI2NTM0NzYw?cjc=j7foncpe"
-    },
+    text = message.text.strip().lower()
 
-    "Виховні години та фізичне виховання": {
-        "teacher": "Шевченко Тетяна Валеріївна",
-        "zoom": "https://us05web.zoom.us/j/87000857117?pwd=VXduMys0V3FhanJQY0VxdUU0QllwQT09",
-        "classroom": "https://classroom.google.com/c/ODAxMDU3MTA0Mzk5?cjc=p4c75e2n"
-    },
+    # Шукаємо точний збіг
+    subject_name = ALIASES.get(text)
 
-    "Фізика": {
-        "teacher": "Табачник Олена Миколаївна",
-        "zoom": "https://us05web.zoom.us/j/5433319306?pwd=R1VQMFlHbFY3UGRSS0p0WC9OQnNyZz09",
-        "classroom": "https://classroom.google.com/c/ODc2NTQ3Mjk0NTMx?cjc=42m7a3h6"
-    },
+    # Якщо точного збігу немає —
+    # шукаємо слово всередині повідомлення
+    if not subject_name:
 
-    "Конструкційні та електротехнічні матеріали": {
-        "teacher": "Лиманченко Віктор Павлович",
-        "zoom": "https://us05web.zoom.us/j/88667130665?pwd=ZU9aSTBENTJRUm84WDFLb1VyMFNvZz09",
-        "classroom": "https://classroom.google.com/c/zesv5q3"
-    },
+        for alias, subject in ALIASES.items():
 
-    "Історія 9 клас": {
-        "teacher": "Не вказано",
-        "zoom": "https://us05web.zoom.us/j/82252074027?pwd=RUt5MzFUbUx3Q2FxcmcyK2xsM2lJdz09",
-        "classroom": "https://classroom.google.com/c/NzA0MjY1MDQxNDIx?cjc=dhdtbsa"
-    },
+            if alias in text:
 
-    "Історія 11 клас": {
-        "teacher": "Не вказано",
-        "zoom": "https://us05web.zoom.us/j/82252074027?pwd=RUt5MzFUbUx3Q2FxcmcyK2xsM2lJdz09",
-        "classroom": "https://classroom.google.com/c/NzA9NDI2NDk1Njg0?cjc=55cc5dj"
-    },
+                subject_name = subject
+                break
 
-    "Правознавство": {
-        "teacher": "Мироненко Олена Юріївна",
-        "zoom": "https://us05web.zoom.us/j/3321454583?pwd=WURKSlhUTGhDeFhEa09QU1Q4TmZkdz09",
-        "classroom": "https://classroom.google.com/c/ODc2NjE5MTkyMjEy?cjc=o3ft4pfb"
-    },
+    # Якщо предмет знайдено
+    if subject_name:
 
-    "Англійська мова": {
-        "teacher": "Салманова Лариса Миколаївна",
-        "zoom": "https://us04web.zoom.us/j/74528114620?pwd=BEPbNFBlqrsf7BHIqisgHYim4kbQwT.1",
-        "classroom": "https://classroom.google.com/c/ODY5MzQ0MDExNDk4?cjc=jwi4ysfh"
-    },
+        info_text, markup = get_subject_info(
+            subject_name
+        )
 
-    "Математика": {
-        "teacher": "Гришко Галина Леонідівна",
-        "zoom": "https://us04web.zoom.us/j/79806870768?pwd=wscfwbeFgO4wbqmAxBJy4znUvOK5E0.1",
-        "classroom": "https://classroom.google.com/c/ODc2NjExMTIxOTc5?cjc=aff7yt24"
-    },
+        if info_text:
 
-    "Біологія і екологія": {
-        "teacher": "Репринцева Ніна Іванівна",
-        "zoom": "https://us04web.zoom.us/j/4316219745?pwd=MvEw06btO8M1LQIg11moihensLlJ9V.1",
-        "classroom": "https://classroom.google.com/c/ODc2NjM0NDgyMjAy?cjc=pjsofk5y"
-    }
+            bot.send_message(
+                message.chat.id,
+                info_text,
+                parse_mode="Markdown",
+                reply_markup=markup
+            )
 
-}
+            return
 
-
-SCHEDULE = {
-
-    "Monday": {},
-
-    "Tuesday": {
-        "1": "Виховні години та фізичне виховання",
-        "2": "Фізика",
-        "3": "Англійська мова",
-        "4": "Українська мова та література"
-    },
-
-    "Wednesday": {
-        "1": "Біологія і екологія",
-        "2": "Українська мова та література",
-        "3": "Конструкційні та електротехнічні матеріали",
-        "4": "Фізика"
-    },
-
-    "Thursday": {
-        "1": "Конструкційні та електротехнічні матеріали",
-        "2": "Правознавство",
-        "3": "Українська мова та література",
-        "4": "Виховні години та фізичне виховання"
-    },
-
-    "Friday": {
-        "1": "Конструкційні та електротехнічні матеріали",
-        "2": "Біологія і екологія",
-        "3": "Українська мова та література",
-        "4": "Правознавство"
-    }
-
-}
+    bot.send_message(
+        message.chat.id,
+        "🤔 Не зрозумів предмет.\n\n"
+        "Напиши, наприклад:\n"
+        "• укр\n"
+        "• матем\n"
+        "• фіз\n"
+        "• англ\n"
+        "• біо\n"
+        "• право"
+    )
