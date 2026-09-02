@@ -1,6 +1,7 @@
 import os
 import json
 import random
+import time
 from datetime import datetime, timezone, timedelta
 import telebot
 from telebot import types
@@ -113,11 +114,11 @@ def send_welcome(message):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     markup.row("📅 Сегодня", "🔮 Завтра", "🗓 На неделю")
     markup.row("📝 Домашка (Classroom)", "⏰ Звонки")
-    markup.row("🧹 Кто дежурит?", "👥 Список группы")
+    markup.row("🧹 Кто дежурит завтра?", "👥 Список группы")
     markup.row("📚 Предметы", "👨‍🏫 Преподаватели", "🔔 Уведомления")
     bot.send_message(
         message.chat.id,
-        "Привет! Я бот группы Е-21.\nИспользуй меню ниже или напиши назву предмета!",
+        "Привет! Я бот группы Е-21.\nИспользуй меню ниже или напиши название предмета!",
         reply_markup=markup
     )
 
@@ -133,26 +134,36 @@ def toggle_notifications(message):
         save_subscribers(subscribed_users)
         bot.send_message(user_id, "🔔 Уведомления включены!")
 
-@bot.message_handler(func=lambda message: message.text in ["⏰ Звонки", "⏰ Расписание звонков"])
+@bot.message_handler(func=lambda message: any(x in message.text.lower() for x in ["звонки", "дзвінки", "расписание звонков", "розклад дзвінків"]))
 def send_calls(message):
     text = "⏰ *Розклад дзвінків:*\n\n"
     for num, times in CALLS.items():
         text += f"{num} пара: {times['start']} - {times['end']}\n"
     bot.send_message(message.chat.id, text, parse_mode="Markdown")
 
-@bot.message_handler(func=lambda message: message.text in ["🧹 Кто дежурит?", "дежурный", "черговий", "кто дежурит", "хто чергує"])
+@bot.message_handler(func=lambda message: any(x in message.text.lower() for x in ["дежур", "чергур", "отвеча", "відповіда", "кто", "хто"]))
 def random_student(message):
+    # Анимация: сначала отправляем сообщение о рандоме
+    temp_msg = bot.send_message(message.chat.id, "🎲 *Выбираем дежурного на завтра...* 🎰", parse_mode="Markdown")
+    time.sleep(2)
+    
     chosen = random.choice(STUDENTS)
-    bot.send_message(message.chat.id, f"🧹 Сегодня дежурит: *{chosen}*! 🧽", parse_mode="Markdown")
+    # Редактируем сообщение, выводя итоговый результат
+    bot.edit_message_text(
+        chat_id=message.chat.id,
+        message_id=temp_msg.message_id,
+        text=f"🧹 *Дежурный на завтра:* {chosen}! 🧽✨",
+        parse_mode="Markdown"
+    )
 
-@bot.message_handler(func=lambda message: message.text == "👥 Список группы")
+@bot.message_handler(func=lambda message: any(x in message.text.lower() for x in ["список", "групп", "групи"]))
 def send_group_list(message):
     text = "👥 *Cписок группы Е-21 (36 студентов):*\n\n"
     for idx, student in enumerate(STUDENTS, 1):
         text += f"{idx}. {student}\n"
     bot.send_message(message.chat.id, text, parse_mode="Markdown")
 
-@bot.message_handler(func=lambda message: message.text == "📝 Домашка (Classroom)")
+@bot.message_handler(func=lambda message: any(x in message.text.lower() for x in ["домашка", "classroom", "классрум"]))
 def send_homework_links(message):
     markup = types.InlineKeyboardMarkup()
     for name, data in SUBJECTS.items():
@@ -167,14 +178,14 @@ def send_subjects(message):
         markup.add(types.InlineKeyboardButton(name, callback_data=f"sub_{name}"))
     bot.send_message(message.chat.id, "Обери предмет:", reply_markup=markup)
 
-@bot.message_handler(func=lambda message: message.text == "👨‍🏫 Преподаватели")
+@bot.message_handler(func=lambda message: any(x in message.text.lower() for x in ["преподавател", "викладач", "учител", "вчител"]))
 def send_teachers(message):
     text = "👨‍🏫 *Список викладачів:*\n\n"
     for name, data in SUBJECTS.items():
         text += f"• *{name}*: {data['teacher']}\n"
     bot.send_message(message.chat.id, text, parse_mode="Markdown")
 
-@bot.message_handler(func=lambda message: message.text in ["📅 Сегодня", "📅 Расписание на сегодня"])
+@bot.message_handler(func=lambda message: any(x in message.text.lower() for x in ["сегодня", "сьогодні"]))
 def send_today_schedule(message):
     now = get_kyiv_time()
     today = now.strftime("%A")
@@ -192,7 +203,7 @@ def send_today_schedule(message):
         text += f"*{num}. {subject}* {time_str}\n"
     bot.send_message(message.chat.id, text, parse_mode="Markdown")
 
-@bot.message_handler(func=lambda message: message.text in ["🔮 Завтра", "Расписание на завтра"])
+@bot.message_handler(func=lambda message: any(x in message.text.lower() for x in ["завтра"]))
 def send_tomorrow_schedule(message):
     tomorrow_dt = get_kyiv_time() + timedelta(days=1)
     tomorrow = tomorrow_dt.strftime("%A")
@@ -210,7 +221,7 @@ def send_tomorrow_schedule(message):
         text += f"*{num}. {subject}* {time_str}\n"
     bot.send_message(message.chat.id, text, parse_mode="Markdown")
 
-@bot.message_handler(func=lambda message: message.text in ["🗓 На неделю", "🗓 Расписание на неделю"])
+@bot.message_handler(func=lambda message: any(x in message.text.lower() for x in ["неделю", "тиждень"]))
 def send_week_schedule(message):
     text = "🗓 *Розклад на тиждень:*\n\n"
     for day_eng, day_ua in DAYS_UA.items():
