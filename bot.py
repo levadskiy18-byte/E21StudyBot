@@ -1,9 +1,22 @@
 import os
 import datetime
+import threading
+from flask import Flask
 import telebot
 from telebot import types
 from apscheduler.schedulers.background import BackgroundScheduler
 from data import SUBJECTS, CALLS, SCHEDULE
+
+# Запуск веб-сервера для Render
+app = Flask('')
+
+@app.route('/')
+def home():
+    return "Bot is running!"
+
+def run_flask():
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host='0.0.0.0', port=port)
 
 # Получаем токен из настроек сервера
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
@@ -76,7 +89,7 @@ def handle_menu(message):
             response += f"📌 **{day_ua}:**\n"
             if day in SCHEDULE and SCHEDULE[day]:
                 for lesson_num, subj_name in SCHEDULE[day].items():
-                    call = CALLS.get(lesson_num, {"start":="", "end": ""})
+                    call = CALLS.get(lesson_num, {"start": "", "end": ""})
                     response += f"  {lesson_num}️⃣ пара ({call['start']}-{call['end']}): {subj_name}\n"
             else:
                 response += "  Пар немає\n"
@@ -115,7 +128,7 @@ def handle_menu(message):
             subscribed_users.add(chat_id)
             bot.send_message(chat_id, "🔔 Ви увімкнули сповіщення! Бот нагадуватиме про пару за 5 хвилин до початку.")
 
-# Проверка времени и отправка уведомлений за 5 минут
+# Проверка времени и отправка уведомлений
 def check_and_send_notifications():
     now = datetime.datetime.now()
     today_en = now.strftime("%A")
@@ -159,4 +172,6 @@ scheduler.add_job(check_and_send_notifications, 'interval', seconds=30)
 scheduler.start()
 
 if __name__ == "__main__":
+    t = threading.Thread(target=run_flask)
+    t.start()
     bot.polling(none_stop=True)
