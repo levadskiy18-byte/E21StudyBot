@@ -133,7 +133,7 @@ def toggle_notifications(message):
         save_subscribers(subscribed_users)
         bot.send_message(user_id, "🔔 Уведомления включены!")
 
-@bot.message_handler(func=lambda message: message.text == "⏰ Звонки")
+@bot.message_handler(func=lambda message: message.text in ["⏰ Звонки", "⏰ Расписание звонков"])
 def send_calls(message):
     text = "⏰ *Розклад дзвінків:*\n\n"
     for num, times in CALLS.items():
@@ -174,7 +174,7 @@ def send_teachers(message):
         text += f"• *{name}*: {data['teacher']}\n"
     bot.send_message(message.chat.id, text, parse_mode="Markdown")
 
-@bot.message_handler(func=lambda message: message.text == "📅 Сегодня")
+@bot.message_handler(func=lambda message: message.text in ["📅 Сегодня", "📅 Расписание на сегодня"])
 def send_today_schedule(message):
     now = get_kyiv_time()
     today = now.strftime("%A")
@@ -192,7 +192,7 @@ def send_today_schedule(message):
         text += f"*{num}. {subject}* {time_str}\n"
     bot.send_message(message.chat.id, text, parse_mode="Markdown")
 
-@bot.message_handler(func=lambda message: message.text == "🔮 Завтра")
+@bot.message_handler(func=lambda message: message.text in ["🔮 Завтра", "Расписание на завтра"])
 def send_tomorrow_schedule(message):
     tomorrow_dt = get_kyiv_time() + timedelta(days=1)
     tomorrow = tomorrow_dt.strftime("%A")
@@ -210,7 +210,7 @@ def send_tomorrow_schedule(message):
         text += f"*{num}. {subject}* {time_str}\n"
     bot.send_message(message.chat.id, text, parse_mode="Markdown")
 
-@bot.message_handler(func=lambda message: message.text == "🗓 На неделю")
+@bot.message_handler(func=lambda message: message.text in ["🗓 На неделю", "🗓 Расписание на неделю"])
 def send_week_schedule(message):
     text = "🗓 *Розклад на тиждень:*\n\n"
     for day_eng, day_ua in DAYS_UA.items():
