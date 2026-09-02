@@ -28,7 +28,7 @@ SUBJECTS = {
 "Конструкційні та електротехнічні матеріали": {
     "teacher": "Лиманченко Віктор Павлович",
     "zoom": "https://us05web.zoom.us/j/88667130665?pwd=ZU9aSTBENTJRUm84WDFLb1VyMFNvZz09",
-    "classroom": "https://classroom.google.com/c/zesv5q3"
+    "classroom": "zesv5q3"
 },
 
 "Історія 9 клас": {
@@ -40,7 +40,7 @@ SUBJECTS = {
 "Історія 11 клас": {
     "teacher": "Не вказано",
     "zoom": "https://us05web.zoom.us/j/82252074027?pwd=RUt5MzFUbUx3Q2FxcmcyK2xsM2lJdz09",
-    "classroom": "https://classroom.google.com/c/NzA9NDI2NDk1Njg0?cjc=55cc5dj"
+    "classroom": "https://classroom.google.com/c/NzA5NDI2NDk1Njg0?cjc=55cc5dj"
 },
 
 "Правознавство": {
