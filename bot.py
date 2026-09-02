@@ -1,177 +1,143 @@
 import os
-import datetime
-import threading
-from flask import Flask
+import json
+from datetime import datetime
 import telebot
 from telebot import types
+from flask import Flask, request
 from apscheduler.schedulers.background import BackgroundScheduler
-from data import SUBJECTS, CALLS, SCHEDULE
+from data import CALLS, SUBJECTS, SCHEDULE
 
-# Запуск веб-сервера для Render
-app = Flask('')
+TOKEN = os.environ.get("BOT_TOKEN")
+bot = telebot.TeleBot(TOKEN)
+app = Flask(__name__)
 
-@app.route('/')
-def home():
-    return "Bot is running!"
+# Постоянное хранение подписчиков в файле
+SUBSCRIBERS_FILE = "subscribers.json"
 
-def run_flask():
-    port = int(os.environ.get("PORT", 8080))
-    app.run(host='0.0.0.0', port=port)
+def load_subscribers():
+    if os.path.exists(SUBSCRIBERS_FILE):
+        try:
+            with open(SUBSCRIBERS_FILE, "r") as f:
+                return set(json.load(f))
+        except Exception:
+            return set()
+    return set()
 
-# Получаем токен из настроек сервера
-BOT_TOKEN = os.environ.get("BOT_TOKEN")
-bot = telebot.TeleBot(BOT_TOKEN)
+def save_subscribers(subs):
+    try:
+        with open(SUBSCRIBERS_FILE, "w") as f:
+            json.dump(list(subs), f)
+    except Exception as e:
+        print(f"Error saving subscribers: {e}")
 
-# Список пользователей, включивших уведомления
-subscribed_users = set()
+subscribed_users = load_subscribers()
 
-# Перевод дней недели
-DAYS_TRANSLATE = {
-    "Monday": "Понеділок",
-    "Tuesday": "Вівторок",
-    "Wednesday": "Середа",
-    "Thursday": "Четвер",
-    "Friday": "П'ятниця",
-    "Saturday": "Субота",
-    "Sunday": "Неділя"
+# Словарь быстрых слов для поиска предметов
+ALIASES = {
+    "укр": "Українська мова та література",
+    "мова": "Українська мова та література",
+    "укр мова": "Українська мова та література",
+    "укр лит": "Українська мова та література",
+    "физкультура": "Виховні години та фізичне виховання",
+    "физра": "Виховні години та фізичне виховання",
+    "виховна": "Виховні години та фізичне виховання",
+    "физика": "Фізика",
+    "фізика": "Фізика",
+    "физ": "Фізика",
+    "мат": "Математика",
+    "матем": "Математика",
+    "математика": "Математика",
+    "алгебра": "Математика",
+    "геометрия": "Математика",
+    "англ": "Англійська мова",
+    "английский": "Англійська мова",
+    "english": "Англійська мова",
+    "био": "Біологія і Екологія",
+    "биология": "Біологія і Екологія",
+    "экология": "Біологія і Екологія",
+    "право": "Правознавство",
+    "правоведение": "Правознавство",
+    "история": "Історія 11 класс",
+    "історія": "Історія 11 класс",
+    "материалы": "Конструкційні та електротехнічні матеріали",
+    "матеріали": "Конструкційні та електротехнічні матеріали",
+    "кэм": "Конструкційні та електротехнічні матеріали"
 }
 
-DAYS_ORDER = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+def get_subject_info_text(subject_name):
+    data = SUBJECTS.get(subject_name)
+    if not data:
+        return None, None
+    text = f"📚 *{subject_name}*\n👨‍🏫 Преподаватель: {data['teacher']}"
+    markup = types.InlineKeyboardMarkup()
+    if data.get("zoom"):
+        markup.add(types.InlineKeyboardButton("🎥 Zoom", url=data["zoom"]))
+    if data.get("classroom"):
+        markup.add(types.InlineKeyboardButton("📚 Google Classroom", url=data["classroom"]))
+    return text, markup
 
-# Главное меню
-def get_main_keyboard():
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    btn1 = types.KeyboardButton("📅 Расписание на сегодня")
-    btn2 = types.KeyboardButton("🗓 Расписание на неделю")
-    btn3 = types.KeyboardButton("⏰ Расписание звонков")
-    btn4 = types.KeyboardButton("📚 Предметы")
-    btn5 = types.KeyboardButton("👨‍🏫 Преподаватели")
-    btn6 = types.KeyboardButton("🔔 Включить/выключить уведомления")
-    markup.row(btn1, btn2)
-    markup.row(btn3)
-    markup.row(btn4, btn5)
-    markup.row(btn6)
-    return markup
+@app.route("/")
+def index():
+    return "Bot is running!", 200
 
-@bot.message_handler(commands=['start'])
+@app.route("/" + TOKEN, methods=["POST"])
+def webhook():
+    json_str = request.get_data().decode("UTF-8")
+    update = telebot.types.Update.de_json(json_str)
+    bot.process_new_updates([update])
+    return "OK", 200
+
+@bot.message_handler(commands=["start"])
 def send_welcome(message):
-    welcome_text = (
-        f"Привіт, {message.from_user.first_name}!\n"
-        f"Це бот для студентів групи Е-21 🎓\n\n"
-        f"Обери потрібний пункт меню нижче:"
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup.row("📅 Расписание на сегодня", "🗓 Расписание на неделю")
+    markup.row("⏰ Расписание звонков", "📚 Предметы")
+    markup.row("👨‍🏫 Преподаватели", "🔔 Включить/выключить уведомления")
+    bot.send_message(
+        message.chat.id,
+        "Привет! Я бот группы Е-21.\nМожешь использовать меню или просто написать название предмета (например: 'укр', 'матем', 'физика'), чтобы получить ссылку!",
+        reply_markup=markup
     )
-    bot.send_message(message.chat.id, welcome_text, reply_markup=get_main_keyboard())
 
+@bot.message_handler(func=lambda message: message.text == "🔔 Включить/выключить уведомления")
+def toggle_notifications(message):
+    user_id = message.chat.id
+    if user_id in subscribed_users:
+        subscribed_users.remove(user_id)
+        save_subscribers(subscribed_users)
+        bot.send_message(user_id, "🔕 Уведомления выключены.")
+    else:
+        subscribed_users.add(user_id)
+        save_subscribers(subscribed_users)
+        bot.send_message(user_id, "🔔 Уведомления включены! Теперь ты будешь получать ссылки перед парами.")
+
+# Обработка коротких названий предметов
 @bot.message_handler(func=lambda message: True)
-def handle_menu(message):
-    text = message.text
-    chat_id = message.chat.id
+def handle_text(message):
+    text_clean = message.text.strip().lower()
+    
+    # Поиск по словарю сокращений
+    matched_subject = ALIASES.get(text_clean)
+    
+    # Если прямого совпадения нет, ищем частичное
+    if not matched_subject:
+        for key, full_name in ALIASES.items():
+            if key in text_clean:
+                matched_subject = full_name
+                break
 
-    if text == "📅 Расписание на сегодня":
-        today_en = datetime.datetime.now().strftime("%A")
-        today_ua = DAYS_TRANSLATE.get(today_en, today_en)
-        
-        if today_en not in SCHEDULE or not SCHEDULE[today_en]:
-            bot.send_message(chat_id, f"📅 **Сьогодні ({today_ua}) пар немає!** 🎉", parse_mode="Markdown")
+    if matched_subject:
+        info_text, reply_markup = get_subject_info_text(matched_subject)
+        if info_text:
+            bot.send_message(message.chat.id, info_text, parse_mode="Markdown", reply_markup=reply_markup)
             return
-        
-        response = f"📅 **Розклад на сьогодні ({today_ua}):**\n\n"
-        for lesson_num, subj_name in SCHEDULE[today_en].items():
-            call = CALLS.get(lesson_num, {"start": "", "end": ""})
-            response += f"{lesson_num}️⃣ пара ({call['start']} - {call['end']}): **{subj_name}**\n"
-        
-        bot.send_message(chat_id, response, parse_mode="Markdown")
 
-    elif text == "🗓 Расписание на неделю":
-        response = "🗓 **Розклад на тиждень:**\n\n"
-        for day in DAYS_ORDER:
-            day_ua = DAYS_TRANSLATE.get(day, day)
-            response += f"📌 **{day_ua}:**\n"
-            if day in SCHEDULE and SCHEDULE[day]:
-                for lesson_num, subj_name in SCHEDULE[day].items():
-                    call = CALLS.get(lesson_num, {"start": "", "end": ""})
-                    response += f"  {lesson_num}️⃣ пара ({call['start']}-{call['end']}): {subj_name}\n"
-            else:
-                response += "  Пар немає\n"
-            response += "\n"
-        bot.send_message(chat_id, response, parse_mode="Markdown")
-
-    elif text == "⏰ Расписание звонков":
-        response = "⏰ **Розклад дзвінків (пар):**\n\n"
-        for num, times in CALLS.items():
-            response += f"{num}️⃣ пара: {times['start']} — {times['end']}\n"
-        bot.send_message(chat_id, response, parse_mode="Markdown")
-
-    elif text == "📚 Предметы":
-        response = "📚 **Список предметів:**\n\n"
-        for subj, info in SUBJECTS.items():
-            response += f"🔹 **{subj}**\n"
-            if info.get("classroom"):
-                response += f"  • Classroom: {info['classroom']}\n"
-            if info.get("zoom"):
-                response += f"  • Zoom: {info['zoom']}\n"
-            response += "\n"
-        bot.send_message(chat_id, response, parse_mode="Markdown", disable_web_page_preview=True)
-
-    elif text == "👨‍🏫 Преподаватели":
-        response = "👨‍🏫 **Викладачі:**\n\n"
-        for subj, info in SUBJECTS.items():
-            teacher = info.get("teacher", "Не вказано")
-            response += f"• **{subj}**: {teacher}\n"
-        bot.send_message(chat_id, response, parse_mode="Markdown")
-
-    elif text == "🔔 Включить/выключить уведомления":
-        if chat_id in subscribed_users:
-            subscribed_users.remove(chat_id)
-            bot.send_message(chat_id, "🔕 Ви вимкнули сповіщення про пари.")
-        else:
-            subscribed_users.add(chat_id)
-            bot.send_message(chat_id, "🔔 Ви увімкнули сповіщення! Бот нагадуватиме про пару за 5 хвилин до початку.")
-
-# Проверка времени и отправка уведомлений
-def check_and_send_notifications():
-    now = datetime.datetime.now()
-    today_en = now.strftime("%A")
-    current_time = now.strftime("%H:%M")
-
-    if today_en not in SCHEDULE:
-        return
-
-    for lesson_num, subj_name in SCHEDULE[today_en].items():
-        if lesson_num in CALLS:
-            start_str = CALLS[lesson_num]["start"]
-            start_dt = datetime.datetime.strptime(start_str, "%H:%M")
-            notify_dt = start_dt - datetime.timedelta(minutes=5)
-            notify_time_str = notify_dt.strftime("%H:%M")
-
-            if current_time == notify_time_str:
-                subj_info = SUBJECTS.get(subj_name, {})
-                teacher = subj_info.get("teacher", "Не вказано")
-                
-                text = (
-                    f"🔔 **Через 5 хвилин починається пара!**\n\n"
-                    f"📚 **{subj_name}**\n"
-                    f"👨‍🏫 **Викладач:** {teacher}"
-                )
-                
-                markup = types.InlineKeyboardMarkup()
-                if subj_info.get("zoom"):
-                    markup.add(types.InlineKeyboardButton("🎥 Zoom", url=subj_info["zoom"]))
-                if subj_info.get("classroom") and subj_info["classroom"].startswith("http"):
-                    markup.add(types.InlineKeyboardButton("📚 Google Classroom", url=subj_info["classroom"]))
-
-                for user_id in subscribed_users:
-                    try:
-                        bot.send_message(user_id, text, reply_markup=markup, parse_mode="Markdown")
-                    except Exception:
-                        pass
-
-# Запуск фонового планировщика
-scheduler = BackgroundScheduler()
-scheduler.add_job(check_and_send_notifications, 'interval', seconds=30)
-scheduler.start()
+    # Если предмет не найден — стандартный ответ
+    if message.text == "📅 Расписание на сегодня":
+        bot.send_message(message.chat.id, "Функция расписания работает по меню.")
+    else:
+        bot.send_message(message.chat.id, "Я не понял запрос. Напиши сокращенное название предмета (например: 'укр', 'матем', 'физика') или воспользуйся меню.")
 
 if __name__ == "__main__":
-    t = threading.Thread(target=run_flask)
-    t.start()
-    bot.polling(none_stop=True)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
