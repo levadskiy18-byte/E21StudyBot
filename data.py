@@ -28,7 +28,7 @@ SUBJECTS = {
     "Конструкційні та електротехнічні матеріали": {
         "teacher": "Лиманченко Віктор Павлович",
         "zoom": "https://us05web.zoom.us/j/88667130665?pwd=ZU9aSTBENTJRUm84WDFLb1VyMFNvZz09",
-        "classroom": ""
+        "classroom": "https://classroom.google.com/c/zesv5q3"
     },
 
     "Історія 9 клас": {
