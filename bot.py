@@ -34,8 +34,11 @@ SUBSCRIBERS_FILE = "subscribers.json"
 # Твій Telegram ID
 ADMIN_ID = 857901222
 
-# Користувачі, які зараз пишуть звернення про проблему
+# Користувачі, які зараз пишуть звернення
 feedback_waiting = set()
+
+# Кому адміністратор зараз відповідає
+admin_reply_targets = {}
 
 
 # ==========================================================
@@ -162,7 +165,7 @@ def save_subscribers():
 
 subscribed_users = load_subscribers()
 
-# Щоб одне і те саме нагадування не відправлялося двічі
+# Щоб одне й те саме нагадування не відправлялося двічі
 sent_notifications = set()
 
 
@@ -594,6 +597,7 @@ def send_subjects(message):
     for index, name in enumerate(
         subject_names
     ):
+
         markup.add(
             types.InlineKeyboardButton(
                 f"📚 {name}",
@@ -619,7 +623,9 @@ def send_subjects(message):
     and call.data.startswith("sub:")
 )
 def callback_subject(call):
+
     try:
+
         index = int(
             call.data.split(
                 ":",
@@ -634,10 +640,12 @@ def callback_subject(call):
         if index < 0 or index >= len(
             subject_names
         ):
+
             bot.answer_callback_query(
                 call.id,
                 "Предмет не знайдено."
             )
+
             return
 
         subject_name = subject_names[index]
@@ -647,6 +655,7 @@ def callback_subject(call):
         )
 
         if info_text:
+
             bot.send_message(
                 call.message.chat.id,
                 info_text,
@@ -659,6 +668,7 @@ def callback_subject(call):
         )
 
     except Exception as error:
+
         print(
             f"Помилка вибору предмета: {error}"
         )
@@ -678,6 +688,7 @@ def callback_subject(call):
     message.text == "👨‍🏫 Викладачі"
 )
 def send_teachers(message):
+
     text = (
         "👨‍🏫 *Список викладачів:*\n\n"
     )
@@ -710,6 +721,7 @@ def send_teachers(message):
     message.text == "⏰ Розклад дзвінків"
 )
 def send_calls(message):
+
     text = (
         "⏰ *Розклад дзвінків:*\n\n"
         "1 пара — 08:00–09:35\n"
@@ -736,6 +748,7 @@ def send_calls(message):
     message.text == "🎥 Zoom"
 )
 def send_zoom(message):
+
     markup = types.InlineKeyboardMarkup()
 
     for name, data in SUBJECTS.items():
@@ -749,6 +762,7 @@ def send_zoom(message):
             isinstance(zoom, str)
             and zoom.startswith("http")
         ):
+
             markup.add(
                 types.InlineKeyboardButton(
                     f"🎥 {name}",
@@ -773,6 +787,7 @@ def send_zoom(message):
     message.text == "📝 Google Classroom"
 )
 def send_classroom(message):
+
     markup = types.InlineKeyboardMarkup()
 
     for name, data in SUBJECTS.items():
@@ -786,6 +801,7 @@ def send_classroom(message):
             isinstance(classroom, str)
             and classroom.startswith("http")
         ):
+
             markup.add(
                 types.InlineKeyboardButton(
                     f"📚 {name}",
@@ -813,6 +829,7 @@ def send_classroom(message):
     message.text == "💬 Чат групи Е-21"
 )
 def group_chat(message):
+
     markup = types.InlineKeyboardMarkup()
 
     markup.add(
@@ -864,7 +881,7 @@ def bot_not_working(message):
 
 
 # ==========================================================
-# ВІДПРАВКА СКАРГИ АДМІНУ
+# ПОЛУЧЕНИЕ ЖАЛОБЫ И ОТПРАВКА АДМИНУ
 # ==========================================================
 
 @bot.message_handler(
@@ -897,38 +914,174 @@ def receive_feedback(message):
         else "немає"
     )
 
-    feedback_text = message.text
+    feedback_text = (
+        message.text
+        if message.text
+        else "Користувач надіслав не текстове повідомлення."
+    )
 
     admin_message = (
-        "🚨 БОТ НЕ ПРАЦЮЄ!!!\n\n"
+        "🚨 *БОТ НЕ ПРАЦЮЄ!!!*\n\n"
         f"👤 Користувач: {full_name or 'Не вказано'}\n"
         f"🔹 Username: {username}\n"
         f"🆔 ID: {message.from_user.id}\n\n"
         f"💬 Проблема:\n{feedback_text}"
     )
 
+    markup = types.InlineKeyboardMarkup()
+
+    markup.add(
+        types.InlineKeyboardButton(
+            "✉️ Відповісти користувачу",
+            callback_data=f"reply:{message.chat.id}"
+        )
+    )
+
     try:
+
         bot.send_message(
             ADMIN_ID,
-            admin_message
+            admin_message,
+            parse_mode="Markdown",
+            reply_markup=markup
         )
 
         bot.send_message(
             message.chat.id,
+
             "✅ Повідомлення відправлено адміністратору.\n\n"
             "Дякую! Я розберуся з проблемою.",
+
             reply_markup=get_main_keyboard()
         )
 
     except Exception as error:
 
         print(
-            f"Помилка відправки звернення адміністратору: {error}"
+            f"Помилка відправки звернення "
+            f"адміністратору: {error}"
         )
 
         bot.send_message(
             message.chat.id,
             "❌ Не вдалося відправити повідомлення адміністратору."
+        )
+
+
+# ==========================================================
+# КНОПКА "ВІДПОВІСТИ КОРИСТУВАЧУ"
+# ==========================================================
+
+@bot.callback_query_handler(
+    func=lambda call:
+    isinstance(call.data, str)
+    and call.data.startswith("reply:")
+)
+def start_admin_reply(call):
+
+    # Дозволяємо відповідати тільки тобі
+    if call.from_user.id != ADMIN_ID:
+
+        bot.answer_callback_query(
+            call.id,
+            "У вас немає доступу."
+        )
+
+        return
+
+    try:
+
+        target_id = int(
+            call.data.split(
+                ":",
+                1
+            )[1]
+        )
+
+        admin_reply_targets[
+            call.from_user.id
+        ] = target_id
+
+        bot.answer_callback_query(
+            call.id
+        )
+
+        bot.send_message(
+            ADMIN_ID,
+
+            "✉️ *Напиши відповідь користувачу.*\n\n"
+            "Наступне повідомлення буде відправлено "
+            "саме цьому користувачу.",
+
+            parse_mode="Markdown"
+        )
+
+    except Exception as error:
+
+        print(
+            f"Помилка вибору користувача "
+            f"для відповіді: {error}"
+        )
+
+        bot.answer_callback_query(
+            call.id,
+            "Помилка."
+        )
+
+
+# ==========================================================
+# ВІДПРАВКА ВІДПОВІДІ АДМІНІСТРАТОРА
+# ==========================================================
+
+@bot.message_handler(
+    func=lambda message:
+    message.from_user.id == ADMIN_ID
+    and message.chat.id == ADMIN_ID
+    and ADMIN_ID in admin_reply_targets
+)
+def send_admin_reply(message):
+
+    target_id = admin_reply_targets.pop(
+        ADMIN_ID,
+        None
+    )
+
+    if target_id is None:
+        return
+
+    reply_text = (
+        message.text
+        if message.text
+        else "Адміністратор надіслав повідомлення."
+    )
+
+    try:
+
+        bot.send_message(
+            target_id,
+
+            "👨‍💻 *Повідомлення від адміністратора:*\n\n"
+            f"{reply_text}",
+
+            parse_mode="Markdown"
+        )
+
+        bot.send_message(
+            ADMIN_ID,
+            "✅ Відповідь відправлена користувачу."
+        )
+
+    except Exception as error:
+
+        print(
+            f"Помилка відправки відповіді: {error}"
+        )
+
+        bot.send_message(
+            ADMIN_ID,
+
+            f"❌ Не вдалося відправити відповідь.\n\n"
+            f"Помилка: {error}"
         )
 
 
@@ -974,6 +1127,7 @@ def group_list(message):
         STUDENTS,
         1
     ):
+
         text += (
             f"{number}. {student}\n"
         )
@@ -1059,6 +1213,7 @@ def send_lesson_notification(
             isinstance(zoom, str)
             and zoom.startswith("http")
         ):
+
             markup.add(
                 types.InlineKeyboardButton(
                     "🎥 Відкрити Zoom",
@@ -1075,6 +1230,7 @@ def send_lesson_notification(
             isinstance(classroom, str)
             and classroom.startswith("http")
         ):
+
             markup.add(
                 types.InlineKeyboardButton(
                     "📚 Google Classroom",
@@ -1087,6 +1243,7 @@ def send_lesson_notification(
     ):
 
         try:
+
             bot.send_message(
                 chat_id,
                 text,
@@ -1174,7 +1331,7 @@ def check_notifications():
             start - now
         ).total_seconds()
 
-        # 10 хвилин = 600 секунд
+        # Приблизно за 10 хвилин
         if 570 <= difference <= 630:
 
             key = (
@@ -1200,7 +1357,7 @@ def check_notifications():
                 start
             )
 
-    # Прибираємо старі ключі
+    # Видаляємо старі ключі
     today_prefix = (
         now.date().isoformat()
     )
