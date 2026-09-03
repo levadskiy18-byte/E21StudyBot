@@ -31,6 +31,12 @@ app = Flask(__name__)
 KYIV = ZoneInfo("Europe/Kyiv")
 SUBSCRIBERS_FILE = "subscribers.json"
 
+# Твій Telegram ID
+ADMIN_ID = 857901222
+
+# Користувачі, які зараз пишуть звернення про проблему
+feedback_waiting = set()
+
 
 # ==========================================================
 # ВІВТОРОК — ВИНЯТОК
@@ -225,6 +231,10 @@ def get_main_keyboard():
     )
 
     markup.row(
+        "🚨 БОТ НЕ ПРАЦЮЄ!!!"
+    )
+
+    markup.row(
         "🔔 Увімкнути/вимкнути сповіщення"
     )
 
@@ -404,7 +414,7 @@ def send_welcome(message):
 
 
 # ==========================================================
-# РОЗКЛАД НА СЬОГОДНІ / ЗАВТРА
+# СЬОГОДНІ / ЗАВТРА
 # ==========================================================
 
 def send_schedule_for(
@@ -472,10 +482,6 @@ def send_schedule_for(
     )
 
 
-# ==========================================================
-# СЬОГОДНІ
-# ==========================================================
-
 @bot.message_handler(
     func=lambda message:
     message.text == "📅 Сьогодні"
@@ -487,10 +493,6 @@ def send_today(message):
         "📅 Розклад на сьогодні —"
     )
 
-
-# ==========================================================
-# ЗАВТРА
-# ==========================================================
 
 @bot.message_handler(
     func=lambda message:
@@ -540,7 +542,6 @@ def send_week(message):
             text += (
                 "Пар немає\n\n"
             )
-
             continue
 
         for number, subject in schedule.items():
@@ -593,8 +594,6 @@ def send_subjects(message):
     for index, name in enumerate(
         subject_names
     ):
-        # Коротке callback_data,
-        # щоб не виникала BUTTON_DATA_INVALID
         markup.add(
             types.InlineKeyboardButton(
                 f"📚 {name}",
@@ -746,8 +745,10 @@ def send_zoom(message):
             ""
         )
 
-        if isinstance(zoom, str) and zoom.startswith("http"):
-
+        if (
+            isinstance(zoom, str)
+            and zoom.startswith("http")
+        ):
             markup.add(
                 types.InlineKeyboardButton(
                     f"🎥 {name}",
@@ -785,7 +786,6 @@ def send_classroom(message):
             isinstance(classroom, str)
             and classroom.startswith("http")
         ):
-
             markup.add(
                 types.InlineKeyboardButton(
                     f"📚 {name}",
@@ -831,6 +831,105 @@ def group_chat(message):
         parse_mode="Markdown",
         reply_markup=markup
     )
+
+
+# ==========================================================
+# БОТ НЕ ПРАЦЮЄ
+# ==========================================================
+
+@bot.message_handler(
+    func=lambda message:
+    message.text == "🚨 БОТ НЕ ПРАЦЮЄ!!!"
+)
+def bot_not_working(message):
+
+    feedback_waiting.add(
+        message.chat.id
+    )
+
+    bot.send_message(
+        message.chat.id,
+
+        "🚨 *Опис проблеми*\n\n"
+        "Напиши одним повідомленням, що саме "
+        "не працює.\n\n"
+        "Наприклад:\n"
+        "• не показує розклад\n"
+        "• не відкривається Zoom\n"
+        "• не приходять сповіщення\n"
+        "• не працює кнопка",
+
+        parse_mode="Markdown"
+    )
+
+
+# ==========================================================
+# ВІДПРАВКА СКАРГИ АДМІНУ
+# ==========================================================
+
+@bot.message_handler(
+    func=lambda message:
+    message.chat.id in feedback_waiting
+)
+def receive_feedback(message):
+
+    feedback_waiting.discard(
+        message.chat.id
+    )
+
+    first_name = (
+        message.from_user.first_name
+        or ""
+    )
+
+    last_name = (
+        message.from_user.last_name
+        or ""
+    )
+
+    full_name = (
+        f"{first_name} {last_name}"
+    ).strip()
+
+    username = (
+        f"@{message.from_user.username}"
+        if message.from_user.username
+        else "немає"
+    )
+
+    feedback_text = message.text
+
+    admin_message = (
+        "🚨 БОТ НЕ ПРАЦЮЄ!!!\n\n"
+        f"👤 Користувач: {full_name or 'Не вказано'}\n"
+        f"🔹 Username: {username}\n"
+        f"🆔 ID: {message.from_user.id}\n\n"
+        f"💬 Проблема:\n{feedback_text}"
+    )
+
+    try:
+        bot.send_message(
+            ADMIN_ID,
+            admin_message
+        )
+
+        bot.send_message(
+            message.chat.id,
+            "✅ Повідомлення відправлено адміністратору.\n\n"
+            "Дякую! Я розберуся з проблемою.",
+            reply_markup=get_main_keyboard()
+        )
+
+    except Exception as error:
+
+        print(
+            f"Помилка відправки звернення адміністратору: {error}"
+        )
+
+        bot.send_message(
+            message.chat.id,
+            "❌ Не вдалося відправити повідомлення адміністратору."
+        )
 
 
 # ==========================================================
@@ -960,7 +1059,6 @@ def send_lesson_notification(
             isinstance(zoom, str)
             and zoom.startswith("http")
         ):
-
             markup.add(
                 types.InlineKeyboardButton(
                     "🎥 Відкрити Zoom",
@@ -977,7 +1075,6 @@ def send_lesson_notification(
             isinstance(classroom, str)
             and classroom.startswith("http")
         ):
-
             markup.add(
                 types.InlineKeyboardButton(
                     "📚 Google Classroom",
@@ -1051,6 +1148,7 @@ def check_notifications():
             continue
 
         try:
+
             start_clock = datetime.strptime(
                 start_text,
                 "%H:%M"
@@ -1076,7 +1174,7 @@ def check_notifications():
             start - now
         ).total_seconds()
 
-        # Приблизно за 10 хвилин
+        # 10 хвилин = 600 секунд
         if 570 <= difference <= 630:
 
             key = (
@@ -1102,7 +1200,7 @@ def check_notifications():
                 start
             )
 
-    # Видаляємо старі ключі
+    # Прибираємо старі ключі
     today_prefix = (
         now.date().isoformat()
     )
