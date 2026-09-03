@@ -2,7 +2,7 @@ import json
 import os
 import random
 import threading
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time
 from zoneinfo import ZoneInfo
 
 import telebot
@@ -13,11 +13,16 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from data import CALLS, SUBJECTS, SCHEDULE
 
 
+# ==========================================================
+# НАСТРОЙКИ
+# ==========================================================
+
 TOKEN = os.environ.get("BOT_TOKEN")
 
 if not TOKEN:
     raise ValueError(
-        "BOT_TOKEN не знайдено! Додай його в Environment Variables на Render."
+        "BOT_TOKEN не знайдено! "
+        "Додай його в Environment Variables на Render."
     )
 
 bot = telebot.TeleBot(TOKEN)
@@ -26,18 +31,35 @@ app = Flask(__name__)
 KYIV = ZoneInfo("Europe/Kyiv")
 SUBSCRIBERS_FILE = "subscribers.json"
 
+
 # ==========================================================
-# ВИНЯТОК ДЛЯ ВІВТОРКА
-# У вівторок 1 пара починається о 09:00
-# В інші дні використовується CALLS
+# ВІВТОРОК — ОКРЕМЕ ВИКЛЮЧЕННЯ
+# ==========================================================
+# У вівторок 1 пара починається о 09:00.
+# Всі інші дні використовують звичайний CALLS з data.py.
 # ==========================================================
 
 TUESDAY_CALLS = {
-    "1": {"start": "09:00", "end": "09:35"},
-    "2": {"start": "09:45", "end": "11:20"},
-    "3": {"start": "12:00", "end": "13:35"},
-    "4": {"start": "13:45", "end": "15:20"},
-    "5": {"start": "15:30", "end": "17:05"},
+    "1": {
+        "start": "09:00",
+        "end": "09:35"
+    },
+    "2": {
+        "start": "09:45",
+        "end": "11:20"
+    },
+    "3": {
+        "start": "12:00",
+        "end": "13:35"
+    },
+    "4": {
+        "start": "13:45",
+        "end": "15:20"
+    },
+    "5": {
+        "start": "15:30",
+        "end": "17:05"
+    }
 }
 
 
@@ -81,7 +103,7 @@ STUDENTS = [
     "Сябро Лев",
     "Танцюра Даріна",
     "Тертишник Василь",
-    "Тюпа Євген",
+    "Тюпа Євген"
 ]
 
 
@@ -96,12 +118,12 @@ DAYS_UA = {
     "Thursday": "Четвер",
     "Friday": "П'ятниця",
     "Saturday": "Субота",
-    "Sunday": "Неділя",
+    "Sunday": "Неділя"
 }
 
 
 # ==========================================================
-# ПІДПИСНИКИ
+# ПІДПИСНИКИ НА СПОВІЩЕННЯ
 # ==========================================================
 
 def load_subscribers():
@@ -114,7 +136,12 @@ def load_subscribers():
             "r",
             encoding="utf-8"
         ) as file:
-            return {int(x) for x in json.load(file)}
+            data = json.load(file)
+
+        return {
+            int(user_id)
+            for user_id in data
+        }
 
     except Exception as error:
         print(
@@ -144,12 +171,12 @@ def save_subscribers():
 
 subscribed_users = load_subscribers()
 
-# Щоб одне й те саме нагадування не надсилалося двічі
+# Щоб одна пара не відправилася двічі
 sent_notifications = set()
 
 
 # ==========================================================
-# ЧАСИ ПАР
+# ОТРИМАННЯ РОЗКЛАДУ ДЗВІНКІВ ДЛЯ КОНКРЕТНОГО ДНЯ
 # ==========================================================
 
 def get_calls_for_day(day_name):
@@ -161,7 +188,11 @@ def get_calls_for_day(day_name):
 
 def get_call_time(day_name, number):
     calls = get_calls_for_day(day_name)
-    return calls.get(number, {})
+
+    return calls.get(
+        str(number),
+        {}
+    )
 
 
 # ==========================================================
@@ -238,7 +269,7 @@ def get_subject_info(subject_name):
         ""
     )
 
-    if zoom.startswith("http"):
+    if isinstance(zoom, str) and zoom.startswith("http"):
         markup.add(
             types.InlineKeyboardButton(
                 "🎥 Відкрити Zoom",
@@ -251,7 +282,7 @@ def get_subject_info(subject_name):
         ""
     )
 
-    if classroom.startswith("http"):
+    if isinstance(classroom, str) and classroom.startswith("http"):
         markup.add(
             types.InlineKeyboardButton(
                 "📚 Google Classroom",
@@ -298,7 +329,8 @@ SEARCH_WORDS = {
         "матеріали",
         "материалы",
         "електро",
-        "електротехнічні"
+        "електротехнічні",
+        "электро"
     ],
 
     "Історія 9 клас": [
@@ -340,12 +372,12 @@ SEARCH_WORDS = {
         "биология",
         "екологія",
         "экология"
-    ],
+    ]
 }
 
 
 # ==========================================================
-# ВЕБ-СЕРВЕР ДЛЯ RENDER
+# WEB-СЕРВЕР ДЛЯ RENDER
 # ==========================================================
 
 @app.route("/")
@@ -363,6 +395,7 @@ def index():
 def send_welcome(message):
     bot.send_message(
         message.chat.id,
+
         "🎓 *Вітаю!*\n\n"
         "Це Telegram-бот групи *Е-21*.\n\n"
         "Тут можна переглянути розклад, "
@@ -375,13 +408,14 @@ def send_welcome(message):
         "• фізика\n"
         "• біо\n"
         "• кон",
+
         parse_mode="Markdown",
         reply_markup=get_main_keyboard()
     )
 
 
 # ==========================================================
-# ФУНКЦІЯ РОЗКЛАДУ
+# ФУНКЦІЯ ПОКАЗУ РОЗКЛАДУ
 # ==========================================================
 
 def send_schedule_for(
@@ -389,7 +423,9 @@ def send_schedule_for(
     target_date,
     title
 ):
-    day = target_date.strftime("%A")
+    day = target_date.strftime(
+        "%A"
+    )
 
     schedule = SCHEDULE.get(
         day,
@@ -404,26 +440,39 @@ def send_schedule_for(
     if not schedule:
         bot.send_message(
             message.chat.id,
-            f"{title} *{day_ua}*\n\n"
+
+            f"*{title} {day_ua}*\n\n"
             "Пар немає 🎉",
+
             parse_mode="Markdown"
         )
+
         return
 
     text = (
-        f"{title} *{day_ua}:*\n\n"
+        f"*{title} {day_ua}:*\n\n"
     )
 
     for number, subject in schedule.items():
+
         call = get_call_time(
             day,
             number
         )
 
+        start = call.get(
+            "start",
+            ""
+        )
+
+        end = call.get(
+            "end",
+            ""
+        )
+
         text += (
             f"*{number} пара* "
-            f"({call.get('start', '')}–"
-            f"{call.get('end', '')})\n"
+            f"({start}–{end})\n"
             f"📚 {subject}\n\n"
         )
 
@@ -439,14 +488,14 @@ def send_schedule_for(
 # ==========================================================
 
 @bot.message_handler(
-    func=lambda m:
-    m.text == "📅 Сьогодні"
+    func=lambda message:
+    message.text == "📅 Сьогодні"
 )
 def send_today(message):
     send_schedule_for(
         message,
         datetime.now(KYIV),
-        "📅 *Розклад на сьогодні —"
+        "📅 Розклад на сьогодні —"
     )
 
 
@@ -455,14 +504,14 @@ def send_today(message):
 # ==========================================================
 
 @bot.message_handler(
-    func=lambda m:
-    m.text == "🔮 Завтра"
+    func=lambda message:
+    message.text == "🔮 Завтра"
 )
 def send_tomorrow(message):
     send_schedule_for(
         message,
         datetime.now(KYIV) + timedelta(days=1),
-        "🔮 *Розклад на завтра —"
+        "🔮 Розклад на завтра —"
     )
 
 
@@ -471,8 +520,8 @@ def send_tomorrow(message):
 # ==========================================================
 
 @bot.message_handler(
-    func=lambda m:
-    m.text == "🗓 Розклад на тиждень"
+    func=lambda message:
+    message.text == "🗓 Розклад на тиждень"
 )
 def send_week(message):
     text = (
@@ -488,6 +537,7 @@ def send_week(message):
     ]
 
     for day in days:
+
         text += (
             f"📌 *{DAYS_UA[day]}:*\n"
         )
@@ -501,18 +551,29 @@ def send_week(message):
             text += (
                 "Пар немає\n\n"
             )
+
             continue
 
         for number, subject in schedule.items():
+
             call = get_call_time(
                 day,
                 number
             )
 
+            start = call.get(
+                "start",
+                ""
+            )
+
+            end = call.get(
+                "end",
+                ""
+            )
+
             text += (
                 f"{number}. "
-                f"{call.get('start', '')}–"
-                f"{call.get('end', '')} — "
+                f"{start}–{end} — "
                 f"{subject}\n"
             )
 
@@ -530,22 +591,27 @@ def send_week(message):
 # ==========================================================
 
 @bot.message_handler(
-    func=lambda m:
-    m.text == "📚 Предмети"
+    func=lambda message:
+    message.text == "📚 Предмети"
 )
 def send_subjects(message):
     markup = types.InlineKeyboardMarkup()
 
-    # ВАЖНО:
-    # callback_data коротке, щоб не було
-    # BUTTON_DATA_INVALID
-    for index, name in enumerate(
+    subject_names = list(
         SUBJECTS.keys()
+    )
+
+    for index, name in enumerate(
+        subject_names
     ):
+        # Короткий callback_data.
+        # Не можна передавати сюди все довге ім'я предмета.
+        callback_data = f"sub:{index}"
+
         markup.add(
             types.InlineKeyboardButton(
                 f"📚 {name}",
-                callback_data=f"sub:{index}"
+                callback_data=callback_data
             )
         )
 
@@ -563,15 +629,18 @@ def send_subjects(message):
 
 @bot.callback_query_handler(
     func=lambda call:
-    call.data.startswith("sub:")
+    isinstance(call.data, str)
+    and call.data.startswith("sub:")
 )
 def callback_subject(call):
     try:
+        index_text = call.data.split(
+            ":",
+            1
+        )[1]
+
         index = int(
-            call.data.split(
-                ":",
-                1
-            )[1]
+            index_text
         )
 
         subject_names = list(
@@ -585,6 +654,7 @@ def callback_subject(call):
                 call.id,
                 "Предмет не знайдено."
             )
+
             return
 
         subject_name = subject_names[index]
@@ -606,6 +676,7 @@ def callback_subject(call):
         )
 
     except Exception as error:
+
         print(
             f"Помилка вибору предмета: {error}"
         )
@@ -621,8 +692,8 @@ def callback_subject(call):
 # ==========================================================
 
 @bot.message_handler(
-    func=lambda m:
-    m.text == "👨‍🏫 Викладачі"
+    func=lambda message:
+    message.text == "👨‍🏫 Викладачі"
 )
 def send_teachers(message):
     text = (
@@ -630,6 +701,7 @@ def send_teachers(message):
     )
 
     for name, data in SUBJECTS.items():
+
         teacher = data.get(
             "teacher",
             "Не вказано"
@@ -652,12 +724,13 @@ def send_teachers(message):
 # ==========================================================
 
 @bot.message_handler(
-    func=lambda m:
-    m.text == "⏰ Розклад дзвінків"
+    func=lambda message:
+    message.text == "⏰ Розклад дзвінків"
 )
 def send_calls(message):
     text = (
         "⏰ *Розклад дзвінків:*\n\n"
+
         "1 пара — 08:00–09:35\n"
         "2 пара — 09:45–11:20\n"
         "⏸ Велика перерва\n"
@@ -678,24 +751,21 @@ def send_calls(message):
 # ==========================================================
 
 @bot.message_handler(
-    func=lambda m:
-    m.text == "🎥 Zoom"
+    func=lambda message:
+    message.text == "🎥 Zoom"
 )
 def send_zoom(message):
     markup = types.InlineKeyboardMarkup()
 
-    for index, (
-        name,
-        data
-    ) in enumerate(
-        SUBJECTS.items()
-    ):
+    for name, data in SUBJECTS.items():
+
         zoom = data.get(
             "zoom",
             ""
         )
 
-        if zoom.startswith("http"):
+        if isinstance(zoom, str) and zoom.startswith("http"):
+
             markup.add(
                 types.InlineKeyboardButton(
                     f"🎥 {name}",
@@ -716,24 +786,24 @@ def send_zoom(message):
 # ==========================================================
 
 @bot.message_handler(
-    func=lambda m:
-    m.text == "📝 Google Classroom"
+    func=lambda message:
+    message.text == "📝 Google Classroom"
 )
 def send_classroom(message):
     markup = types.InlineKeyboardMarkup()
 
-    for index, (
-        name,
-        data
-    ) in enumerate(
-        SUBJECTS.items()
-    ):
+    for name, data in SUBJECTS.items():
+
         classroom = data.get(
             "classroom",
             ""
         )
 
-        if classroom.startswith("http"):
+        if (
+            isinstance(classroom, str)
+            and classroom.startswith("http")
+        ):
+
             markup.add(
                 types.InlineKeyboardButton(
                     f"📚 {name}",
@@ -743,8 +813,10 @@ def send_classroom(message):
 
     bot.send_message(
         message.chat.id,
+
         "📚 *Google Classroom*\n\n"
         "Обери предмет:",
+
         parse_mode="Markdown",
         reply_markup=markup
     )
@@ -755,18 +827,21 @@ def send_classroom(message):
 # ==========================================================
 
 @bot.message_handler(
-    func=lambda m:
-    m.text == "🧹 Хто чергує завтра?"
+    func=lambda message:
+    message.text == "🧹 Хто чергує завтра?"
 )
 def random_student(message):
+
     student = random.choice(
         STUDENTS
     )
 
     bot.send_message(
         message.chat.id,
+
         "🧹 *Черговий завтра:*\n\n"
         f"👤 {student}",
+
         parse_mode="Markdown"
     )
 
@@ -776,10 +851,11 @@ def random_student(message):
 # ==========================================================
 
 @bot.message_handler(
-    func=lambda m:
-    m.text == "👥 Список групи"
+    func=lambda message:
+    message.text == "👥 Список групи"
 )
 def group_list(message):
+
     text = (
         "👥 *Список групи Е-21:*\n\n"
     )
@@ -800,17 +876,19 @@ def group_list(message):
 
 
 # ==========================================================
-# СПОВІЩЕННЯ
+# СПОВІЩЕННЯ — УВІМКНУТИ / ВИМКНУТИ
 # ==========================================================
 
 @bot.message_handler(
-    func=lambda m:
-    m.text == "🔔 Увімкнути/вимкнути сповіщення"
+    func=lambda message:
+    message.text == "🔔 Увімкнути/вимкнути сповіщення"
 )
 def toggle_notifications(message):
+
     user_id = message.chat.id
 
     if user_id in subscribed_users:
+
         subscribed_users.remove(
             user_id
         )
@@ -823,6 +901,7 @@ def toggle_notifications(message):
         )
 
     else:
+
         subscribed_users.add(
             user_id
         )
@@ -831,8 +910,9 @@ def toggle_notifications(message):
 
         bot.send_message(
             user_id,
+
             "🔔 Сповіщення увімкнено!\n\n"
-            "Бот надсилатиме нагадування "
+            "Нагадування надходитимуть "
             "за 10 хвилин до початку пари."
         )
 
@@ -844,7 +924,7 @@ def toggle_notifications(message):
 def send_lesson_notification(
     number,
     subject,
-    start_time
+    start
 ):
     info = SUBJECTS.get(
         subject
@@ -853,19 +933,23 @@ def send_lesson_notification(
     text = (
         "🔔 *Через 10 хвилин починається пара!*\n\n"
         f"*{number} пара* — {subject}\n"
-        f"⏰ Початок: "
-        f"{start_time.strftime('%H:%M')}"
+        f"⏰ Початок: {start.strftime('%H:%M')}"
     )
 
     markup = types.InlineKeyboardMarkup()
 
     if info:
+
         zoom = info.get(
             "zoom",
             ""
         )
 
-        if zoom.startswith("http"):
+        if (
+            isinstance(zoom, str)
+            and zoom.startswith("http")
+        ):
+
             markup.add(
                 types.InlineKeyboardButton(
                     "🎥 Відкрити Zoom",
@@ -878,7 +962,11 @@ def send_lesson_notification(
             ""
         )
 
-        if classroom.startswith("http"):
+        if (
+            isinstance(classroom, str)
+            and classroom.startswith("http")
+        ):
+
             markup.add(
                 types.InlineKeyboardButton(
                     "📚 Google Classroom",
@@ -889,6 +977,7 @@ def send_lesson_notification(
     for chat_id in list(
         subscribed_users
     ):
+
         try:
             bot.send_message(
                 chat_id,
@@ -898,6 +987,7 @@ def send_lesson_notification(
             )
 
         except Exception as error:
+
             print(
                 f"Не вдалося надіслати "
                 f"сповіщення {chat_id}: {error}"
@@ -905,10 +995,11 @@ def send_lesson_notification(
 
 
 # ==========================================================
-# ПЕРЕВІРКА СПОВІЩЕНЬ
+# ПЕРЕВІРКА ЧАСУ ДЛЯ СПОВІЩЕНЬ
 # ==========================================================
 
 def check_notifications():
+
     now = datetime.now(
         KYIV
     ).replace(
@@ -941,26 +1032,39 @@ def check_notifications():
         if not call:
             continue
 
-        start_time = datetime.strptime(
-            call["start"],
-            "%H:%M"
-        ).time()
+        start_text = call.get(
+            "start"
+        )
+
+        if not start_text:
+            continue
+
+        try:
+            start_clock = datetime.strptime(
+                start_text,
+                "%H:%M"
+            ).time()
+
+        except ValueError:
+            print(
+                f"Неправильний час для "
+                f"{number} пари: {start_text}"
+            )
+            continue
 
         start = datetime.combine(
             now.date(),
-            start_time
+            start_clock
         ).replace(
             tzinfo=KYIV
         )
 
-        difference = int(
-            (
-                start - now
-            ).total_seconds()
-        )
+        difference = (
+            start - now
+        ).total_seconds()
 
-        # 10 хвилин = 600 секунд
-        # Дозволяємо похибку від 570 до 630 секунд
+        # 600 секунд = 10 хвилин.
+        # Допуск від 9 хв 30 сек до 10 хв 30 сек.
         if 570 <= difference <= 630:
 
             key = (
@@ -968,44 +1072,54 @@ def check_notifications():
                 f"{number}"
             )
 
-            if key not in sent_notifications:
+            if key in sent_notifications:
+                continue
 
-                sent_notifications.add(
-                    key
-                )
+            sent_notifications.add(
+                key
+            )
 
-                send_lesson_notification(
-                    number,
-                    subject,
-                    start
-                )
+            print(
+                f"Надсилаю нагадування: "
+                f"{number} пара — {subject}"
+            )
 
-    # Видаляємо старі ключі
+            send_lesson_notification(
+                number,
+                subject,
+                start
+            )
+
+    # Прибираємо старі ключі
     today_prefix = (
         now.date().isoformat()
     )
 
-    sent_notifications.intersection_update(
-        {
-            key
-            for key in sent_notifications
-            if key.startswith(
-                today_prefix
-            )
-        }
+    old_keys = {
+        key
+        for key in sent_notifications
+        if not key.startswith(
+            today_prefix
+        )
+    }
+
+    sent_notifications.difference_update(
+        old_keys
     )
 
 
 # ==========================================================
-# ПОШУК ПО ПРЕДМЕТАХ
+# ПОШУК ПРЕДМЕТІВ
+# ==========================================================
 # ЦЕЙ ОБРОБНИК ПОВИНЕН БУТИ ОСТАННІМ
 # ==========================================================
 
 @bot.message_handler(
-    func=lambda m:
-    m.text is not None
+    func=lambda message:
+    message.text is not None
 )
 def search_subject(message):
+
     text = (
         message.text.lower().strip()
     )
@@ -1021,6 +1135,7 @@ def search_subject(message):
                 )
 
                 if info_text:
+
                     bot.send_message(
                         message.chat.id,
                         info_text,
@@ -1032,6 +1147,7 @@ def search_subject(message):
 
     bot.send_message(
         message.chat.id,
+
         "❓ Не зрозумів.\n\n"
         "Напиши предмет або скорочення:\n\n"
         "• укр\n"
@@ -1044,7 +1160,7 @@ def search_subject(message):
 
 
 # ==========================================================
-# ПЛАНУВАЛЬНИК СПОВІЩЕНЬ
+# ПЛАНУВАЛЬНИК
 # ==========================================================
 
 scheduler = BackgroundScheduler(
@@ -1067,7 +1183,9 @@ scheduler.start()
 # ==========================================================
 
 def run_bot():
+
     try:
+
         bot.remove_webhook()
 
         print(
@@ -1081,13 +1199,14 @@ def run_bot():
         )
 
     except Exception as error:
+
         print(
             f"Помилка Telegram-бота: {error}"
         )
 
 
 # ==========================================================
-# ЗАПУСК
+# ЗАПУСК RENDER
 # ==========================================================
 
 if __name__ == "__main__":
