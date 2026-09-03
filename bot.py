@@ -29,7 +29,9 @@ bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
 
 KYIV = ZoneInfo("Europe/Kyiv")
+
 SUBSCRIBERS_FILE = "subscribers.json"
+USERS_FILE = "users.json"
 
 # Твій Telegram ID
 ADMIN_ID = 857901222
@@ -39,6 +41,9 @@ feedback_waiting = set()
 
 # Кому адміністратор зараз відповідає
 admin_reply_targets = {}
+
+# Чекаємо від адміністратора текст оголошення
+announcement_waiting = set()
 
 
 # ==========================================================
@@ -165,7 +170,78 @@ def save_subscribers():
 
 subscribed_users = load_subscribers()
 
-# Щоб одне й те саме нагадування не відправлялося двічі
+
+# ==========================================================
+# ВСІ КОРИСТУВАЧІ БОТА
+# ==========================================================
+# Сюди потрапляють користувачі, які натискали /start.
+# Саме їм надсилаються оголошення.
+# ==========================================================
+
+def load_users():
+    if not os.path.exists(USERS_FILE):
+        return set()
+
+    try:
+        with open(
+            USERS_FILE,
+            "r",
+            encoding="utf-8"
+        ) as file:
+            data = json.load(file)
+
+        return {
+            int(user_id)
+            for user_id in data
+        }
+
+    except Exception as error:
+        print(
+            f"Помилка завантаження користувачів: {error}"
+        )
+        return set()
+
+
+def save_users():
+    try:
+        with open(
+            USERS_FILE,
+            "w",
+            encoding="utf-8"
+        ) as file:
+            json.dump(
+                sorted(known_users),
+                file,
+                ensure_ascii=False
+            )
+
+    except Exception as error:
+        print(
+            f"Помилка збереження користувачів: {error}"
+        )
+
+
+known_users = load_users()
+
+
+def register_user(message):
+    try:
+        user_id = message.chat.id
+
+        if user_id not in known_users:
+            known_users.add(user_id)
+            save_users()
+
+    except Exception as error:
+        print(
+            f"Помилка реєстрації користувача: {error}"
+        )
+
+
+# ==========================================================
+# ЩОБ ОДНЕ НАГАДУВАННЯ НЕ ПРИЙШЛО ДВІЧІ
+# ==========================================================
+
 sent_notifications = set()
 
 
@@ -193,7 +269,8 @@ def get_call_time(day_name, number):
 # ГОЛОВНЕ МЕНЮ
 # ==========================================================
 
-def get_main_keyboard():
+def get_main_keyboard(is_admin=False):
+
     markup = types.ReplyKeyboardMarkup(
         resize_keyboard=True
     )
@@ -241,6 +318,12 @@ def get_main_keyboard():
         "🔔 Увімкнути/вимкнути сповіщення"
     )
 
+    # Кнопка оголошень тільки для тебе
+    if is_admin:
+        markup.row(
+            "📢 Оголошення"
+        )
+
     return markup
 
 
@@ -249,7 +332,10 @@ def get_main_keyboard():
 # ==========================================================
 
 def get_subject_info(subject_name):
-    subject = SUBJECTS.get(subject_name)
+
+    subject = SUBJECTS.get(
+        subject_name
+    )
 
     if not subject:
         return None, None
@@ -271,7 +357,10 @@ def get_subject_info(subject_name):
         ""
     )
 
-    if isinstance(zoom, str) and zoom.startswith("http"):
+    if (
+        isinstance(zoom, str)
+        and zoom.startswith("http")
+    ):
         markup.add(
             types.InlineKeyboardButton(
                 "🎥 Відкрити Zoom",
@@ -284,7 +373,10 @@ def get_subject_info(subject_name):
         ""
     )
 
-    if isinstance(classroom, str) and classroom.startswith("http"):
+    if (
+        isinstance(classroom, str)
+        and classroom.startswith("http")
+    ):
         markup.add(
             types.InlineKeyboardButton(
                 "📚 Google Classroom",
@@ -300,12 +392,13 @@ def get_subject_info(subject_name):
 # ==========================================================
 
 SEARCH_WORDS = {
+
     "Українська мова та література": [
         "укр",
         "українська",
         "украинский",
         "література",
-        "літ",
+        "літ"
     ],
 
     "Виховні години та фізичне виховання": [
@@ -313,13 +406,13 @@ SEARCH_WORDS = {
         "физра",
         "фізичне",
         "фізвих",
-        "виховна",
+        "виховна"
     ],
 
     "Фізика": [
         "фізика",
         "физика",
-        "фіз",
+        "фіз"
     ],
 
     "Конструкційні та електротехнічні матеріали": [
@@ -332,39 +425,39 @@ SEARCH_WORDS = {
         "материалы",
         "електро",
         "електротехнічні",
-        "электро",
+        "электро"
     ],
 
     "Історія 9 клас": [
         "історія 9",
         "история 9",
         "історія9",
-        "история9",
+        "история9"
     ],
 
     "Історія 11 клас": [
         "історія 11",
         "история 11",
         "історія11",
-        "история11",
+        "история11"
     ],
 
     "Правознавство": [
         "право",
-        "правознавство",
+        "правознавство"
     ],
 
     "Англійська мова": [
         "англ",
         "англійська",
-        "английский",
+        "английский"
     ],
 
     "Математика": [
         "матем",
         "математика",
         "матемю",
-        "алгебра",
+        "алгебра"
     ],
 
     "Біологія і екологія": [
@@ -373,8 +466,8 @@ SEARCH_WORDS = {
         "біологія",
         "биология",
         "екологія",
-        "экология",
-    ],
+        "экология"
+    ]
 }
 
 
@@ -395,6 +488,9 @@ def index():
     commands=["start"]
 )
 def send_welcome(message):
+
+    register_user(message)
+
     bot.send_message(
         message.chat.id,
 
@@ -412,12 +508,15 @@ def send_welcome(message):
         "• кон",
 
         parse_mode="Markdown",
-        reply_markup=get_main_keyboard()
+
+        reply_markup=get_main_keyboard(
+            is_admin=message.chat.id == ADMIN_ID
+        )
     )
 
 
 # ==========================================================
-# СЬОГОДНІ / ЗАВТРА
+# РОЗКЛАД СЬОГОДНІ / ЗАВТРА
 # ==========================================================
 
 def send_schedule_for(
@@ -425,6 +524,9 @@ def send_schedule_for(
     target_date,
     title
 ):
+
+    register_user(message)
+
     day = target_date.strftime(
         "%A"
     )
@@ -440,6 +542,7 @@ def send_schedule_for(
     )
 
     if not schedule:
+
         bot.send_message(
             message.chat.id,
 
@@ -490,6 +593,7 @@ def send_schedule_for(
     message.text == "📅 Сьогодні"
 )
 def send_today(message):
+
     send_schedule_for(
         message,
         datetime.now(KYIV),
@@ -502,6 +606,7 @@ def send_today(message):
     message.text == "🔮 Завтра"
 )
 def send_tomorrow(message):
+
     send_schedule_for(
         message,
         datetime.now(KYIV) + timedelta(days=1),
@@ -518,6 +623,9 @@ def send_tomorrow(message):
     message.text == "🗓 Розклад на тиждень"
 )
 def send_week(message):
+
+    register_user(message)
+
     text = (
         "🗓 *Розклад на тиждень:*\n\n"
     )
@@ -542,9 +650,11 @@ def send_week(message):
         )
 
         if not schedule:
+
             text += (
                 "Пар немає\n\n"
             )
+
             continue
 
         for number, subject in schedule.items():
@@ -554,19 +664,10 @@ def send_week(message):
                 number
             )
 
-            start = call.get(
-                "start",
-                ""
-            )
-
-            end = call.get(
-                "end",
-                ""
-            )
-
             text += (
                 f"{number}. "
-                f"{start}–{end} — "
+                f"{call.get('start', '')}–"
+                f"{call.get('end', '')} — "
                 f"{subject}\n"
             )
 
@@ -588,6 +689,9 @@ def send_week(message):
     message.text == "📚 Предмети"
 )
 def send_subjects(message):
+
+    register_user(message)
+
     markup = types.InlineKeyboardMarkup()
 
     subject_names = list(
@@ -648,7 +752,9 @@ def callback_subject(call):
 
             return
 
-        subject_name = subject_names[index]
+        subject_name = (
+            subject_names[index]
+        )
 
         info_text, markup = get_subject_info(
             subject_name
@@ -689,6 +795,8 @@ def callback_subject(call):
 )
 def send_teachers(message):
 
+    register_user(message)
+
     text = (
         "👨‍🏫 *Список викладачів:*\n\n"
     )
@@ -722,6 +830,8 @@ def send_teachers(message):
 )
 def send_calls(message):
 
+    register_user(message)
+
     text = (
         "⏰ *Розклад дзвінків:*\n\n"
         "1 пара — 08:00–09:35\n"
@@ -748,6 +858,8 @@ def send_calls(message):
     message.text == "🎥 Zoom"
 )
 def send_zoom(message):
+
+    register_user(message)
 
     markup = types.InlineKeyboardMarkup()
 
@@ -787,6 +899,8 @@ def send_zoom(message):
     message.text == "📝 Google Classroom"
 )
 def send_classroom(message):
+
+    register_user(message)
 
     markup = types.InlineKeyboardMarkup()
 
@@ -830,6 +944,8 @@ def send_classroom(message):
 )
 def group_chat(message):
 
+    register_user(message)
+
     markup = types.InlineKeyboardMarkup()
 
     markup.add(
@@ -860,6 +976,8 @@ def group_chat(message):
 )
 def bot_not_working(message):
 
+    register_user(message)
+
     feedback_waiting.add(
         message.chat.id
     )
@@ -881,7 +999,7 @@ def bot_not_working(message):
 
 
 # ==========================================================
-# ПОЛУЧЕНИЕ ЖАЛОБЫ И ОТПРАВКА АДМИНУ
+# ОТРИМАННЯ СКАРГИ
 # ==========================================================
 
 @bot.message_handler(
@@ -889,6 +1007,8 @@ def bot_not_working(message):
     message.chat.id in feedback_waiting
 )
 def receive_feedback(message):
+
+    register_user(message)
 
     feedback_waiting.discard(
         message.chat.id
@@ -917,7 +1037,7 @@ def receive_feedback(message):
     feedback_text = (
         message.text
         if message.text
-        else "Користувач надіслав не текстове повідомлення."
+        else "Користувач надіслав повідомлення без тексту."
     )
 
     admin_message = (
@@ -952,14 +1072,15 @@ def receive_feedback(message):
             "✅ Повідомлення відправлено адміністратору.\n\n"
             "Дякую! Я розберуся з проблемою.",
 
-            reply_markup=get_main_keyboard()
+            reply_markup=get_main_keyboard(
+                is_admin=message.chat.id == ADMIN_ID
+            )
         )
 
     except Exception as error:
 
         print(
-            f"Помилка відправки звернення "
-            f"адміністратору: {error}"
+            f"Помилка відправки звернення: {error}"
         )
 
         bot.send_message(
@@ -969,7 +1090,7 @@ def receive_feedback(message):
 
 
 # ==========================================================
-# КНОПКА "ВІДПОВІСТИ КОРИСТУВАЧУ"
+# ВІДПОВІДЬ АДМІНІСТРАТОРА
 # ==========================================================
 
 @bot.callback_query_handler(
@@ -979,7 +1100,6 @@ def receive_feedback(message):
 )
 def start_admin_reply(call):
 
-    # Дозволяємо відповідати тільки тобі
     if call.from_user.id != ADMIN_ID:
 
         bot.answer_callback_query(
@@ -999,7 +1119,7 @@ def start_admin_reply(call):
         )
 
         admin_reply_targets[
-            call.from_user.id
+            ADMIN_ID
         ] = target_id
 
         bot.answer_callback_query(
@@ -1019,8 +1139,7 @@ def start_admin_reply(call):
     except Exception as error:
 
         print(
-            f"Помилка вибору користувача "
-            f"для відповіді: {error}"
+            f"Помилка відповіді користувачу: {error}"
         )
 
         bot.answer_callback_query(
@@ -1028,10 +1147,6 @@ def start_admin_reply(call):
             "Помилка."
         )
 
-
-# ==========================================================
-# ВІДПРАВКА ВІДПОВІДІ АДМІНІСТРАТОРА
-# ==========================================================
 
 @bot.message_handler(
     func=lambda message:
@@ -1079,10 +1194,120 @@ def send_admin_reply(message):
 
         bot.send_message(
             ADMIN_ID,
-
             f"❌ Не вдалося відправити відповідь.\n\n"
             f"Помилка: {error}"
         )
+
+
+# ==========================================================
+# ОГОЛОШЕННЯ
+# ==========================================================
+
+@bot.message_handler(
+    func=lambda message:
+    message.text == "📢 Оголошення"
+)
+def start_announcement(message):
+
+    if message.chat.id != ADMIN_ID:
+
+        bot.send_message(
+            message.chat.id,
+            "У вас немає доступу до цієї функції."
+        )
+
+        return
+
+    announcement_waiting.add(
+        ADMIN_ID
+    )
+
+    bot.send_message(
+        ADMIN_ID,
+
+        "📢 *Нове оголошення*\n\n"
+        "Напиши текст, який потрібно розіслати всій групі.",
+
+        parse_mode="Markdown"
+    )
+
+
+# ==========================================================
+# ВІДПРАВКА ОГОЛОШЕННЯ ВСІМ
+# ==========================================================
+
+@bot.message_handler(
+    func=lambda message:
+    message.from_user.id == ADMIN_ID
+    and message.chat.id == ADMIN_ID
+    and ADMIN_ID in announcement_waiting
+)
+def send_announcement(message):
+
+    announcement_waiting.discard(
+        ADMIN_ID
+    )
+
+    announcement_text = (
+        message.text
+        if message.text
+        else "Оголошення без тексту."
+    )
+
+    text = (
+        "📢 *ОГОЛОШЕННЯ*\n\n"
+        f"{announcement_text}"
+    )
+
+    # Розсилаємо всім відомим користувачам
+    recipients = set(
+        known_users
+    )
+
+    # На всяк випадок додаємо також підписників сповіщень
+    recipients.update(
+        subscribed_users
+    )
+
+    recipients.discard(
+        ADMIN_ID
+    )
+
+    sent_count = 0
+    failed_count = 0
+
+    for chat_id in list(
+        recipients
+    ):
+
+        try:
+
+            bot.send_message(
+                chat_id,
+                text,
+                parse_mode="Markdown"
+            )
+
+            sent_count += 1
+
+        except Exception as error:
+
+            failed_count += 1
+
+            print(
+                f"Не вдалося надіслати "
+                f"оголошення {chat_id}: {error}"
+            )
+
+    bot.send_message(
+        ADMIN_ID,
+
+        "✅ *Оголошення розіслано!*\n\n"
+        f"📨 Надіслано: {sent_count}\n"
+        f"❌ Не доставлено: {failed_count}",
+
+        parse_mode="Markdown"
+    )
 
 
 # ==========================================================
@@ -1094,6 +1319,8 @@ def send_admin_reply(message):
     message.text == "🧹 Хто чергує завтра?"
 )
 def random_student(message):
+
+    register_user(message)
 
     student = random.choice(
         STUDENTS
@@ -1118,6 +1345,8 @@ def random_student(message):
     message.text == "👥 Список групи"
 )
 def group_list(message):
+
+    register_user(message)
 
     text = (
         "👥 *Список групи Е-21:*\n\n"
@@ -1148,6 +1377,8 @@ def group_list(message):
     message.text == "🔔 Увімкнути/вимкнути сповіщення"
 )
 def toggle_notifications(message):
+
+    register_user(message)
 
     user_id = message.chat.id
 
@@ -1182,7 +1413,7 @@ def toggle_notifications(message):
 
 
 # ==========================================================
-# ВІДПРАВКА СПОВІЩЕННЯ
+# ВІДПРАВКА НАГАДУВАННЯ
 # ==========================================================
 
 def send_lesson_notification(
@@ -1190,6 +1421,7 @@ def send_lesson_notification(
     subject,
     start
 ):
+
     info = SUBJECTS.get(
         subject
     )
@@ -1260,7 +1492,7 @@ def send_lesson_notification(
 
 
 # ==========================================================
-# ПЕРЕВІРКА СПОВІЩЕНЬ
+# ПЕРЕВІРКА НАГАДУВАНЬ
 # ==========================================================
 
 def check_notifications():
@@ -1331,7 +1563,7 @@ def check_notifications():
             start - now
         ).total_seconds()
 
-        # Приблизно за 10 хвилин
+        # Приблизно 10 хвилин
         if 570 <= difference <= 630:
 
             key = (
@@ -1357,7 +1589,6 @@ def check_notifications():
                 start
             )
 
-    # Видаляємо старі ключі
     today_prefix = (
         now.date().isoformat()
     )
@@ -1385,6 +1616,8 @@ def check_notifications():
     message.text is not None
 )
 def search_subject(message):
+
+    register_user(message)
 
     text = (
         message.text.lower().strip()
@@ -1426,7 +1659,7 @@ def search_subject(message):
 
 
 # ==========================================================
-# ПЛАНУВАЛЬНИК СПОВІЩЕНЬ
+# ПЛАНУВАЛЬНИК
 # ==========================================================
 
 scheduler = BackgroundScheduler(
