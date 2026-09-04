@@ -35,6 +35,7 @@ if not TOKEN:
     )
 
 ADMIN_ID = 857901222
+
 GROUP_CHAT_URL = "https://t.me/+GaN9ZTAYn_01ODRi"
 DONATE_URL = "https://send.monobank.ua/jar/5r7iFcvzb7"
 
@@ -51,7 +52,7 @@ SUBSCRIBERS_FILE = "subscribers.json"
 USERS_FILE = "users.json"
 
 # ==========================================================
-# СПИСОК ГРУПИ
+# СПИСОК ГРУПИ Е-21
 # ==========================================================
 
 STUDENTS = [
@@ -94,7 +95,7 @@ STUDENTS = [
 ]
 
 # ==========================================================
-# ДАННЫЕ ПОЛЬЗОВАТЕЛЕЙ
+# РАБОЧИЕ ДАННЫЕ
 # ==========================================================
 
 subscribed_users = set()
@@ -107,7 +108,7 @@ pending_admin_replies = {}
 pending_announcement = set()
 
 # ==========================================================
-# ФАЙЛЫ
+# ЗАГРУЗКА / СОХРАНЕНИЕ
 # ==========================================================
 
 def load_ids(filename):
@@ -133,7 +134,6 @@ def save_ids(filename, values):
                 f,
                 ensure_ascii=False
             )
-
     except Exception as e:
         print(f"Помилка збереження {filename}: {e}")
 
@@ -174,7 +174,8 @@ DAYS_UA = {
 def get_call_time(target_date, number):
     number = str(number)
 
-    # Только понедельник: первая пара с 08:45
+    # Единственное исключение:
+    # по понедельникам 1-я пара начинается в 08:45.
     if target_date.weekday() == 0 and number == "1":
         return "08:45", "09:35"
 
@@ -183,7 +184,10 @@ def get_call_time(target_date, number):
     if not call:
         return "", ""
 
-    return call.get("start", ""), call.get("end", "")
+    return (
+        call.get("start", ""),
+        call.get("end", "")
+    )
 
 # ==========================================================
 # РАСПИСАНИЕ ПО ДАТЕ
@@ -213,10 +217,16 @@ def get_schedule_for_date(target_date):
     day_name = target_date.strftime("%A")
 
     if current_start <= target_date <= current_end:
-        return CURRENT_SCHEDULE.get(day_name, {})
+        return CURRENT_SCHEDULE.get(
+            day_name,
+            {}
+        )
 
     if next_start <= target_date <= next_end:
-        return NEXT_SCHEDULE.get(day_name, {})
+        return NEXT_SCHEDULE.get(
+            day_name,
+            {}
+        )
 
     return {}
 
@@ -248,12 +258,24 @@ def get_current_week():
     ).date()
 
     if current_start <= today <= current_end:
-        return CURRENT_SCHEDULE, current_start, current_end
+        return (
+            CURRENT_SCHEDULE,
+            current_start,
+            current_end
+        )
 
     if next_start <= today <= next_end:
-        return NEXT_SCHEDULE, next_start, next_end
+        return (
+            NEXT_SCHEDULE,
+            next_start,
+            next_end
+        )
 
-    return None, None, None
+    return (
+        None,
+        None,
+        None
+    )
 
 # ==========================================================
 # СЛЕДУЮЩАЯ НЕДЕЛЯ
@@ -283,12 +305,24 @@ def get_next_week():
     ).date()
 
     if current_start <= today <= current_end:
-        return NEXT_SCHEDULE, next_start, next_end
+        return (
+            NEXT_SCHEDULE,
+            next_start,
+            next_end
+        )
 
     if next_start <= today <= next_end:
-        return None, None, None
+        return (
+            None,
+            None,
+            None
+        )
 
-    return None, None, None
+    return (
+        None,
+        None,
+        None
+    )
 
 # ==========================================================
 # ГЛАВНОЕ МЕНЮ
@@ -406,23 +440,35 @@ def get_subject_info(subject_name):
     return text, markup
 
 # ==========================================================
-# СЕГОДНЯ / ЗАВТРА
+# РАСПИСАНИЕ СЕГОДНЯ / ЗАВТРА
 # ==========================================================
 
 def send_schedule_for(message, target_date, title):
     schedule = get_schedule_for_date(target_date)
 
     day_name = target_date.strftime("%A")
-    day_ua = DAYS_UA.get(day_name, day_name)
+    day_ua = DAYS_UA.get(
+        day_name,
+        day_name
+    )
 
     if not schedule:
+        text = (
+            f"{title} {day_ua}:\n\n"
+            "Пар немає 🎉"
+        )
+
         bot.send_message(
             message.chat.id,
-            f"{title} *{day_ua}:*\n\nПар немає 🎉"
+            text,
+            parse_mode=None
         )
+
         return
 
-    text = f"{title} *{day_ua}:*\n\n"
+    text = (
+        f"{title} {day_ua}:\n\n"
+    )
 
     for number, subject in schedule.items():
         start, end = get_call_time(
@@ -431,17 +477,22 @@ def send_schedule_for(message, target_date, title):
         )
 
         if subject == "Фізвиховання":
-            subject = "Виховні години та фізичне виховання"
+            subject = (
+                "Виховні години та фізичне виховання"
+            )
 
         text += (
-            f"*{number} пара* "
+            f"{number} пара "
             f"({start}–{end})\n"
             f"📚 {subject}\n\n"
         )
 
+    # Без Markdown, чтобы Telegram не выдавал
+    # ошибку "Can't parse entities".
     bot.send_message(
         message.chat.id,
-        text
+        text,
+        parse_mode=None
     )
 
 # ==========================================================
@@ -450,7 +501,9 @@ def send_schedule_for(message, target_date, title):
 
 @bot.message_handler(commands=["start"])
 def send_welcome(message):
-    remember_user(message.from_user.id)
+    remember_user(
+        message.from_user.id
+    )
 
     bot.send_message(
         message.chat.id,
@@ -475,14 +528,16 @@ def send_welcome(message):
     m.text == "📅 Сьогодні"
 )
 def send_today(message):
-    remember_user(message.from_user.id)
+    remember_user(
+        message.from_user.id
+    )
 
     today = datetime.now(KYIV).date()
 
     send_schedule_for(
         message,
         today,
-        "📅 *Розклад на сьогодні —"
+        "📅 Розклад на сьогодні —"
     )
 
 # ==========================================================
@@ -494,7 +549,9 @@ def send_today(message):
     m.text == "🔮 Завтра"
 )
 def send_tomorrow(message):
-    remember_user(message.from_user.id)
+    remember_user(
+        message.from_user.id
+    )
 
     tomorrow = (
         datetime.now(KYIV).date()
@@ -504,7 +561,7 @@ def send_tomorrow(message):
     send_schedule_for(
         message,
         tomorrow,
-        "🔮 *Розклад на завтра —"
+        "🔮 Розклад на завтра —"
     )
 
 # ==========================================================
@@ -516,9 +573,13 @@ def send_tomorrow(message):
     m.text == "🗓 Цей тиждень"
 )
 def send_current_week(message):
-    remember_user(message.from_user.id)
+    remember_user(
+        message.from_user.id
+    )
 
-    schedule_data, start_date, end_date = get_current_week()
+    schedule_data, start_date, end_date = (
+        get_current_week()
+    )
 
     if not schedule_data:
         bot.send_message(
@@ -529,7 +590,7 @@ def send_current_week(message):
         return
 
     text = (
-        "🗓 *Розклад поточного тижня:*\n"
+        "🗓 Розклад поточного тижня:\n"
         f"{start_date.strftime('%d.%m.%Y')} — "
         f"{end_date.strftime('%d.%m.%Y')}\n\n"
     )
@@ -537,15 +598,29 @@ def send_current_week(message):
     current = start_date
 
     while current <= end_date:
-        day_name = current.strftime("%A")
-        day_ua = DAYS_UA.get(day_name, day_name)
+        day_name = current.strftime(
+            "%A"
+        )
 
-        schedule = schedule_data.get(day_name, {})
+        day_ua = DAYS_UA.get(
+            day_name,
+            day_name
+        )
 
-        text += f"📌 *{day_ua}:*\n"
+        schedule = schedule_data.get(
+            day_name,
+            {}
+        )
+
+        text += (
+            f"📌 {day_ua}:\n"
+        )
 
         if not schedule:
-            text += "Пар немає 🎉\n\n"
+            text += (
+                "Пар немає 🎉\n\n"
+            )
+
         else:
             for number, subject in schedule.items():
                 start, end = get_call_time(
@@ -554,7 +629,9 @@ def send_current_week(message):
                 )
 
                 if subject == "Фізвиховання":
-                    subject = "Виховні години та фізичне виховання"
+                    subject = (
+                        "Виховні години та фізичне виховання"
+                    )
 
                 text += (
                     f"{number}. {start}–{end} — "
@@ -563,11 +640,14 @@ def send_current_week(message):
 
             text += "\n"
 
-        current += timedelta(days=1)
+        current += timedelta(
+            days=1
+        )
 
     bot.send_message(
         message.chat.id,
-        text
+        text,
+        parse_mode=None
     )
 
 # ==========================================================
@@ -579,9 +659,13 @@ def send_current_week(message):
     m.text == "🔮 Наступний тиждень"
 )
 def send_next_week(message):
-    remember_user(message.from_user.id)
+    remember_user(
+        message.from_user.id
+    )
 
-    schedule_data, start_date, end_date = get_next_week()
+    schedule_data, start_date, end_date = (
+        get_next_week()
+    )
 
     if not schedule_data:
         bot.send_message(
@@ -592,7 +676,7 @@ def send_next_week(message):
         return
 
     text = (
-        "🗓 *Розклад наступного тижня:*\n"
+        "🗓 Розклад наступного тижня:\n"
         f"{start_date.strftime('%d.%m.%Y')} — "
         f"{end_date.strftime('%d.%m.%Y')}\n\n"
     )
@@ -600,15 +684,29 @@ def send_next_week(message):
     current = start_date
 
     while current <= end_date:
-        day_name = current.strftime("%A")
-        day_ua = DAYS_UA.get(day_name, day_name)
+        day_name = current.strftime(
+            "%A"
+        )
 
-        schedule = schedule_data.get(day_name, {})
+        day_ua = DAYS_UA.get(
+            day_name,
+            day_name
+        )
 
-        text += f"📌 *{day_ua}:*\n"
+        schedule = schedule_data.get(
+            day_name,
+            {}
+        )
+
+        text += (
+            f"📌 {day_ua}:\n"
+        )
 
         if not schedule:
-            text += "Пар немає 🎉\n\n"
+            text += (
+                "Пар немає 🎉\n\n"
+            )
+
         else:
             for number, subject in schedule.items():
                 start, end = get_call_time(
@@ -617,7 +715,9 @@ def send_next_week(message):
                 )
 
                 if subject == "Фізвиховання":
-                    subject = "Виховні години та фізичне виховання"
+                    subject = (
+                        "Виховні години та фізичне виховання"
+                    )
 
                 text += (
                     f"{number}. {start}–{end} — "
@@ -626,11 +726,14 @@ def send_next_week(message):
 
             text += "\n"
 
-        current += timedelta(days=1)
+        current += timedelta(
+            days=1
+        )
 
     bot.send_message(
         message.chat.id,
-        text
+        text,
+        parse_mode=None
     )
 
 # ==========================================================
@@ -642,10 +745,12 @@ def send_next_week(message):
     m.text == "⏰ Розклад дзвінків"
 )
 def send_calls(message):
-    remember_user(message.from_user.id)
+    remember_user(
+        message.from_user.id
+    )
 
     text = (
-        "⏰ *Розклад дзвінків:*\n\n"
+        "⏰ Розклад дзвінків:\n\n"
         "1 пара — 08:00–09:35\n"
         "ℹ️ У понеділок 1-а пара — 08:45–09:35\n\n"
     )
@@ -661,11 +766,12 @@ def send_calls(message):
 
     bot.send_message(
         message.chat.id,
-        text
+        text,
+        parse_mode=None
     )
 
 # ==========================================================
-# ПРЕДМЕТИ
+# ПРЕДМЕТЫ
 # ==========================================================
 
 @bot.message_handler(
@@ -673,12 +779,19 @@ def send_calls(message):
     m.text == "📚 Предмети"
 )
 def send_subjects(message):
-    remember_user(message.from_user.id)
+    remember_user(
+        message.from_user.id
+    )
 
-    subject_names = list(SUBJECTS.keys())
+    subject_names = list(
+        SUBJECTS.keys()
+    )
+
     markup = types.InlineKeyboardMarkup()
 
-    for index, name in enumerate(subject_names):
+    for index, name in enumerate(
+        subject_names
+    ):
         markup.add(
             types.InlineKeyboardButton(
                 f"📚 {name}",
@@ -700,13 +813,22 @@ def send_subjects(message):
 def callback_subject(call):
     try:
         index = int(
-            call.data.split(":", 1)[1]
+            call.data.split(
+                ":",
+                1
+            )[1]
         )
 
-        subject_names = list(SUBJECTS.keys())
+        subject_names = list(
+            SUBJECTS.keys()
+        )
+
         subject_name = subject_names[index]
 
-    except (ValueError, IndexError):
+    except (
+        ValueError,
+        IndexError
+    ):
         bot.answer_callback_query(
             call.id,
             "Помилка."
@@ -724,7 +846,9 @@ def callback_subject(call):
             reply_markup=markup
         )
 
-    bot.answer_callback_query(call.id)
+    bot.answer_callback_query(
+        call.id
+    )
 
 # ==========================================================
 # ВИКЛАДАЧІ
@@ -735,9 +859,13 @@ def callback_subject(call):
     m.text == "👨‍🏫 Викладачі"
 )
 def send_teachers(message):
-    remember_user(message.from_user.id)
+    remember_user(
+        message.from_user.id
+    )
 
-    text = "👨‍🏫 *Список викладачів:*\n\n"
+    text = (
+        "👨‍🏫 Список викладачів:\n\n"
+    )
 
     for name, data in SUBJECTS.items():
         teacher = data.get(
@@ -746,13 +874,14 @@ def send_teachers(message):
         )
 
         text += (
-            f"📚 *{name}*\n"
+            f"📚 {name}\n"
             f"👨‍🏫 {teacher}\n\n"
         )
 
     bot.send_message(
         message.chat.id,
-        text
+        text,
+        parse_mode=None
     )
 
 # ==========================================================
@@ -764,12 +893,17 @@ def send_teachers(message):
     m.text == "🎥 Zoom"
 )
 def send_zoom(message):
-    remember_user(message.from_user.id)
+    remember_user(
+        message.from_user.id
+    )
 
     markup = types.InlineKeyboardMarkup()
 
     for name, data in SUBJECTS.items():
-        zoom = data.get("zoom", "")
+        zoom = data.get(
+            "zoom",
+            ""
+        )
 
         if zoom.startswith("http"):
             markup.add(
@@ -779,6 +913,13 @@ def send_zoom(message):
                 )
             )
 
+    if not markup.keyboard:
+        bot.send_message(
+            message.chat.id,
+            "📭 Посилання Zoom ще не додані."
+        )
+        return
+
     bot.send_message(
         message.chat.id,
         "🎥 *Обери предмет:*",
@@ -786,7 +927,7 @@ def send_zoom(message):
     )
 
 # ==========================================================
-# CLASSROOM
+# GOOGLE CLASSROOM
 # ==========================================================
 
 @bot.message_handler(
@@ -794,12 +935,17 @@ def send_zoom(message):
     m.text == "📝 Google Classroom"
 )
 def send_classroom(message):
-    remember_user(message.from_user.id)
+    remember_user(
+        message.from_user.id
+    )
 
     markup = types.InlineKeyboardMarkup()
 
     for name, data in SUBJECTS.items():
-        classroom = data.get("classroom", "")
+        classroom = data.get(
+            "classroom",
+            ""
+        )
 
         if classroom.startswith("http"):
             markup.add(
@@ -808,6 +954,13 @@ def send_classroom(message):
                     url=classroom
                 )
             )
+
+    if not markup.keyboard:
+        bot.send_message(
+            message.chat.id,
+            "📭 Посилання Google Classroom ще не додані."
+        )
+        return
 
     bot.send_message(
         message.chat.id,
@@ -825,9 +978,13 @@ def send_classroom(message):
     m.text == "🧹 Хто чергує завтра?"
 )
 def random_student(message):
-    remember_user(message.from_user.id)
+    remember_user(
+        message.from_user.id
+    )
 
-    student = random.choice(STUDENTS)
+    student = random.choice(
+        STUDENTS
+    )
 
     bot.send_message(
         message.chat.id,
@@ -844,15 +1001,21 @@ def random_student(message):
     m.text == "👥 Список групи"
 )
 def group_list(message):
-    remember_user(message.from_user.id)
+    remember_user(
+        message.from_user.id
+    )
 
-    text = "👥 *Список групи Е-21:*\n\n"
+    text = (
+        "👥 *Список групи Е-21:*\n\n"
+    )
 
     for i, student in enumerate(
         STUDENTS,
         1
     ):
-        text += f"{i}. {student}\n"
+        text += (
+            f"{i}. {student}\n"
+        )
 
     bot.send_message(
         message.chat.id,
@@ -868,7 +1031,9 @@ def group_list(message):
     m.text == "💬 Чат групи Е-21"
 )
 def group_chat(message):
-    remember_user(message.from_user.id)
+    remember_user(
+        message.from_user.id
+    )
 
     markup = types.InlineKeyboardMarkup()
 
@@ -894,7 +1059,9 @@ def group_chat(message):
     m.text == "🥤 Кинь монету адміну на Кока-Колу"
 )
 def donate(message):
-    remember_user(message.from_user.id)
+    remember_user(
+        message.from_user.id
+    )
 
     markup = types.InlineKeyboardMarkup()
 
@@ -913,7 +1080,7 @@ def donate(message):
     )
 
 # ==========================================================
-# УВІМЛЕННЯ / ВИМКНЕННЯ СПОВЕЩЕНИЙ
+# СПОВЕЩЕНИЯ
 # ==========================================================
 
 @bot.message_handler(
@@ -924,22 +1091,32 @@ def donate(message):
     ]
 )
 def toggle_notifications(message):
-    remember_user(message.from_user.id)
+    remember_user(
+        message.from_user.id
+    )
 
     user_id = message.from_user.id
 
     if user_id in subscribed_users:
-        subscribed_users.remove(user_id)
+        subscribed_users.remove(
+            user_id
+        )
+
         save_subscribers()
 
         bot.send_message(
             user_id,
             "🔕 Сповіщення вимкнено.",
-            reply_markup=get_main_keyboard(user_id)
+            reply_markup=get_main_keyboard(
+                user_id
+            )
         )
 
     else:
-        subscribed_users.add(user_id)
+        subscribed_users.add(
+            user_id
+        )
+
         save_subscribers()
 
         bot.send_message(
@@ -948,11 +1125,13 @@ def toggle_notifications(message):
             "Бот надсилатиме нагадування "
             "за 10 хвилин до пари та "
             "повідомлення в момент її початку.",
-            reply_markup=get_main_keyboard(user_id)
+            reply_markup=get_main_keyboard(
+                user_id
+            )
         )
 
 # ==========================================================
-# УВЕДОМЛЕНИЕ О ПАРЕ
+# НАПОМИНАНИЕ О ПАРЕ
 # ==========================================================
 
 def send_lesson_notification(
@@ -962,9 +1141,13 @@ def send_lesson_notification(
     kind="before"
 ):
     if subject == "Фізвиховання":
-        subject = "Виховні години та фізичне виховання"
+        subject = (
+            "Виховні години та фізичне виховання"
+        )
 
-    info = SUBJECTS.get(subject)
+    info = SUBJECTS.get(
+        subject
+    )
 
     if kind == "before":
         text = (
@@ -973,6 +1156,7 @@ def send_lesson_notification(
             f"*{number} пара* — {subject}\n"
             f"⏰ Початок: {start_time}"
         )
+
     else:
         text = (
             "▶️ *Пара почалася!*\n\n"
@@ -983,8 +1167,15 @@ def send_lesson_notification(
     markup = types.InlineKeyboardMarkup()
 
     if info:
-        zoom = info.get("zoom", "")
-        classroom = info.get("classroom", "")
+        zoom = info.get(
+            "zoom",
+            ""
+        )
+
+        classroom = info.get(
+            "classroom",
+            ""
+        )
 
         buttons = []
 
@@ -1005,9 +1196,13 @@ def send_lesson_notification(
             )
 
         if buttons:
-            markup.row(*buttons)
+            markup.row(
+                *buttons
+            )
 
-    for chat_id in list(subscribed_users):
+    for chat_id in list(
+        subscribed_users
+    ):
         try:
             if markup.keyboard:
                 bot.send_message(
@@ -1032,7 +1227,9 @@ def send_lesson_notification(
 # ==========================================================
 
 def check_notifications():
-    now = datetime.now(KYIV).replace(
+    now = datetime.now(
+        KYIV
+    ).replace(
         second=0,
         microsecond=0
     )
@@ -1073,18 +1270,24 @@ def check_notifications():
         )
 
         diff = int(
-            (start_dt - now).total_seconds()
+            (
+                start_dt - now
+            ).total_seconds()
         )
 
         # За 10 хвилин
         if 570 <= diff <= 630:
+
             key = (
                 f"{today.isoformat()}_"
                 f"{number}_before"
             )
 
             if key not in sent_notifications:
-                sent_notifications.add(key)
+
+                sent_notifications.add(
+                    key
+                )
 
                 send_lesson_notification(
                     number,
@@ -1095,13 +1298,17 @@ def check_notifications():
 
         # В момент початку
         elif -30 <= diff <= 30:
+
             key = (
                 f"{today.isoformat()}_"
                 f"{number}_start"
             )
 
             if key not in sent_notifications:
-                sent_notifications.add(key)
+
+                sent_notifications.add(
+                    key
+                )
 
                 send_lesson_notification(
                     number,
@@ -1113,16 +1320,18 @@ def check_notifications():
     # Удаляем старые записи
     prefix = today.isoformat()
 
-    sent_notifications_copy = set(
+    old_keys = set(
         sent_notifications
     )
 
-    for key in sent_notifications_copy:
+    for key in old_keys:
         if not key.startswith(prefix):
-            sent_notifications.discard(key)
+            sent_notifications.discard(
+                key
+            )
 
 # ==========================================================
-# ЖАЛОБЫ
+# ЖАЛОБА
 # ==========================================================
 
 @bot.message_handler(
@@ -1130,7 +1339,9 @@ def check_notifications():
     m.text == "🚨 БОТ НЕ ПРАЦЮЄ!!!"
 )
 def complaint_start(message):
-    remember_user(message.from_user.id)
+    remember_user(
+        message.from_user.id
+    )
 
     pending_complaints[
         message.from_user.id
@@ -1162,10 +1373,12 @@ def complaint_message(message):
     )
 
     full_name = " ".join(
-        x for x in [
+        x
+        for x in [
             message.from_user.first_name,
             message.from_user.last_name
-        ] if x
+        ]
+        if x
     )
 
     text = (
@@ -1221,7 +1434,10 @@ def reply_button(call):
 
     try:
         user_id = int(
-            call.data.split(":", 1)[1]
+            call.data.split(
+                ":",
+                1
+            )[1]
         )
 
     except Exception:
@@ -1326,11 +1542,13 @@ def announcement_send(message):
     failed = 0
 
     for user_id in recipients:
+
         try:
             bot.send_message(
                 user_id,
                 text
             )
+
             sent += 1
 
         except Exception:
@@ -1348,6 +1566,7 @@ def announcement_send(message):
 # ==========================================================
 
 SEARCH_WORDS = {
+
     "Українська мова та література": [
         "укр",
         "українська",
@@ -1483,7 +1702,7 @@ def health():
     return "OK", 200
 
 # ==========================================================
-# ЗАПУСК БОТА
+# ЗАПУСК
 # ==========================================================
 
 def run_bot():
