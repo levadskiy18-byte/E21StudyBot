@@ -52,19 +52,13 @@ def load_ids(filename):
             data = json.load(f)
 
         return {int(x) for x in data}
-
     except Exception:
         return set()
 
 
 def save_ids(filename, values):
     with open(filename, "w", encoding="utf-8") as f:
-        json.dump(
-            sorted(values),
-            f,
-            ensure_ascii=False,
-            indent=2,
-        )
+        json.dump(sorted(values), f, ensure_ascii=False, indent=2)
 
 
 known_users = load_ids(USERS_FILE)
@@ -119,7 +113,6 @@ def format_date(d):
         "Субота",
         "Неділя",
     ]
-
     return f"{weekdays[d.weekday()]}, {d.strftime('%d.%m.%Y')}"
 
 
@@ -128,21 +121,10 @@ def parse_date(value):
 
 
 def get_call_time(date_obj, pair_num):
-    """
-    Час пар.
-
-    Єдине нестандартне правило:
-    ПОНЕДІЛОК — 1 пара починається о 08:45.
-
-    Вівторок, середа, четвер і п'ятниця:
-    1 пара починається о 08:00.
-
-    Інші пари беруться з CALLS.
-    """
-
     pair_num = str(pair_num)
 
-    # Тільки понеділок: 1 пара о 08:45
+    # Только понедельник: 1-я пара начинается в 08:45
+    # Во все остальные дни 1-я пара начинается в 08:00
     if date_obj.weekday() == 0 and pair_num == "1":
         return "08:45", "09:35"
 
@@ -157,7 +139,6 @@ def get_call_time(date_obj, pair_num):
 def get_schedule_for_date(date_obj):
     current_start = parse_date(CURRENT_WEEK_START)
     current_end = parse_date(CURRENT_WEEK_END)
-
     next_start = parse_date(NEXT_WEEK_START)
     next_end = parse_date(NEXT_WEEK_END)
 
@@ -185,7 +166,6 @@ def get_schedule_for_date(date_obj):
 def get_week_data_for_date(date_obj):
     current_start = parse_date(CURRENT_WEEK_START)
     current_end = parse_date(CURRENT_WEEK_END)
-
     next_start = parse_date(NEXT_WEEK_START)
     next_end = parse_date(NEXT_WEEK_END)
 
@@ -201,17 +181,12 @@ def get_week_data_for_date(date_obj):
 def get_next_week_data(date_obj):
     current_start = parse_date(CURRENT_WEEK_START)
     current_end = parse_date(CURRENT_WEEK_END)
-
     next_start = parse_date(NEXT_WEEK_START)
     next_end = parse_date(NEXT_WEEK_END)
 
-    # Поки йде тиждень 31.08–04.09,
-    # наступний — 07.09–11.09
     if current_start <= date_obj <= current_end:
         return NEXT_SCHEDULE, next_start, next_end
 
-    # Коли вже настав 07.09–11.09,
-    # наступний тиждень ще не завантажений
     if next_start <= date_obj <= next_end:
         return None, None, None
 
@@ -256,10 +231,11 @@ def schedule_text_for_day(date_obj):
             str(pair_num),
         )
 
-        if start and end:
-            time_text = f"{start}–{end}"
-        else:
-            time_text = "час не вказано"
+        time_text = (
+            f"{start}–{end}"
+            if start and end
+            else "час не вказано"
+        )
 
         info = find_subject_info(subject)
 
@@ -271,7 +247,10 @@ def schedule_text_for_day(date_obj):
         )
 
         if info:
-            teacher = info.get("teacher", "")
+            teacher = info.get(
+                "teacher",
+                "",
+            )
 
             if teacher:
                 lines.append(
@@ -299,8 +278,15 @@ def schedule_buttons(date_obj):
         if not info:
             continue
 
-        zoom = info.get("zoom", "")
-        classroom = info.get("classroom", "")
+        zoom = info.get(
+            "zoom",
+            "",
+        )
+
+        classroom = info.get(
+            "classroom",
+            "",
+        )
 
         buttons = []
 
@@ -601,7 +587,10 @@ def zoom_handler(message):
     markup = types.InlineKeyboardMarkup()
 
     for subject, info in SUBJECTS.items():
-        zoom = info.get("zoom", "")
+        zoom = info.get(
+            "zoom",
+            "",
+        )
 
         if zoom:
             markup.add(
@@ -1331,4 +1320,3 @@ if __name__ == "__main__":
     ).start()
 
     run_web()
-```
