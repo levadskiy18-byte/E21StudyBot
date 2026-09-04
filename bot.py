@@ -42,7 +42,7 @@ feedback_waiting = set()
 # Кому адміністратор зараз відповідає
 admin_reply_targets = {}
 
-# Очікуємо від адміністратора текст оголошення
+# Чекаємо від адміністратора текст оголошення
 announcement_waiting = set()
 
 
@@ -63,26 +63,11 @@ DONATE_URL = (
 # ==========================================================
 
 TUESDAY_CALLS = {
-    "1": {
-        "start": "09:00",
-        "end": "09:35"
-    },
-    "2": {
-        "start": "09:45",
-        "end": "11:20"
-    },
-    "3": {
-        "start": "12:00",
-        "end": "13:35"
-    },
-    "4": {
-        "start": "13:45",
-        "end": "15:20"
-    },
-    "5": {
-        "start": "15:30",
-        "end": "17:05"
-    }
+    "1": {"start": "09:00", "end": "09:35"},
+    "2": {"start": "09:45", "end": "11:20"},
+    "3": {"start": "12:00", "end": "13:35"},
+    "4": {"start": "13:45", "end": "15:20"},
+    "5": {"start": "15:30", "end": "17:05"},
 }
 
 
@@ -540,7 +525,7 @@ def send_welcome(message):
 
 
 # ==========================================================
-# СЬОГОДНІ / ЗАВТРА
+# РОЗКЛАД СЬОГОДНІ / ЗАВТРА
 # ==========================================================
 
 def send_schedule_for(
@@ -717,6 +702,7 @@ def send_subjects(message):
         subject_names
     ):
 
+        # Короткий callback_data
         markup.add(
             types.InlineKeyboardButton(
                 f"📚 {name}",
@@ -1455,12 +1441,63 @@ def toggle_notifications(message):
 
             "🔔 Сповіщення увімкнено!\n\n"
             "Нагадування надходитимуть "
-            "за 10 хвилин до початку пари."
+            "за 10 хвилин до початку пари "
+            "та в момент її початку."
         )
 
 
 # ==========================================================
-# ВІДПРАВКА НАГАДУВАННЯ
+# КНОПКИ ДЛЯ НАГАДУВАННЯ
+# ==========================================================
+
+def get_lesson_markup(subject):
+
+    markup = types.InlineKeyboardMarkup()
+
+    info = SUBJECTS.get(
+        subject
+    )
+
+    if not info:
+        return markup
+
+    zoom = info.get(
+        "zoom",
+        ""
+    )
+
+    if (
+        isinstance(zoom, str)
+        and zoom.startswith("http")
+    ):
+        markup.add(
+            types.InlineKeyboardButton(
+                "🎥 Відкрити Zoom",
+                url=zoom
+            )
+        )
+
+    classroom = info.get(
+        "classroom",
+        ""
+    )
+
+    if (
+        isinstance(classroom, str)
+        and classroom.startswith("http")
+    ):
+        markup.add(
+            types.InlineKeyboardButton(
+                "📚 Google Classroom",
+                url=classroom
+            )
+        )
+
+    return markup
+
+
+# ==========================================================
+# НАГАДУВАННЯ ЗА 10 ХВИЛИН
 # ==========================================================
 
 def send_lesson_notification(
@@ -1469,53 +1506,15 @@ def send_lesson_notification(
     start
 ):
 
-    info = SUBJECTS.get(
-        subject
-    )
-
     text = (
         "🔔 *Через 10 хвилин починається пара!*\n\n"
         f"*{number} пара* — {subject}\n"
         f"⏰ Початок: {start.strftime('%H:%M')}"
     )
 
-    markup = types.InlineKeyboardMarkup()
-
-    if info:
-
-        zoom = info.get(
-            "zoom",
-            ""
-        )
-
-        if (
-            isinstance(zoom, str)
-            and zoom.startswith("http")
-        ):
-
-            markup.add(
-                types.InlineKeyboardButton(
-                    "🎥 Відкрити Zoom",
-                    url=zoom
-                )
-            )
-
-        classroom = info.get(
-            "classroom",
-            ""
-        )
-
-        if (
-            isinstance(classroom, str)
-            and classroom.startswith("http")
-        ):
-
-            markup.add(
-                types.InlineKeyboardButton(
-                    "📚 Google Classroom",
-                    url=classroom
-                )
-            )
+    markup = get_lesson_markup(
+        subject
+    )
 
     for chat_id in list(
         subscribed_users
@@ -1534,7 +1533,49 @@ def send_lesson_notification(
 
             print(
                 f"Не вдалося надіслати "
-                f"сповіщення {chat_id}: {error}"
+                f"нагадування {chat_id}: {error}"
+            )
+
+
+# ==========================================================
+# УВЕДОМЛЕНИЕ О НАЧАЛЕ ПАРЫ
+# ==========================================================
+
+def send_lesson_started_notification(
+    number,
+    subject,
+    start
+):
+
+    text = (
+        "▶️ *Пара почалася!*\n\n"
+        f"*{number} пара* — {subject}\n"
+        f"⏰ Початок: {start.strftime('%H:%M')}"
+    )
+
+    markup = get_lesson_markup(
+        subject
+    )
+
+    for chat_id in list(
+        subscribed_users
+    ):
+
+        try:
+
+            bot.send_message(
+                chat_id,
+                text,
+                parse_mode="Markdown",
+                reply_markup=markup
+            )
+
+        except Exception as error:
+
+            print(
+                f"Не вдалося надіслати "
+                f"повідомлення про початок "
+                f"{chat_id}: {error}"
             )
 
 
@@ -1610,30 +1651,65 @@ def check_notifications():
             start - now
         ).total_seconds()
 
+        # ==================================================
+        # 1. ЗА 10 ХВИЛИН
+        # ==================================================
+
         if 570 <= difference <= 630:
 
             key = (
                 f"{now.date().isoformat()}_"
-                f"{number}"
+                f"{number}_10"
             )
 
-            if key in sent_notifications:
-                continue
+            if key not in sent_notifications:
 
-            sent_notifications.add(
-                key
+                sent_notifications.add(
+                    key
+                )
+
+                print(
+                    f"Надсилаю нагадування за 10 хвилин: "
+                    f"{number} пара — {subject}"
+                )
+
+                send_lesson_notification(
+                    number,
+                    subject,
+                    start
+                )
+
+        # ==================================================
+        # 2. В МОМЕНТ ПОЧАТКУ ПАРИ
+        # ==================================================
+
+        if 0 <= difference <= 30:
+
+            key = (
+                f"{now.date().isoformat()}_"
+                f"{number}_start"
             )
 
-            print(
-                f"Надсилаю нагадування: "
-                f"{number} пара — {subject}"
-            )
+            if key not in sent_notifications:
 
-            send_lesson_notification(
-                number,
-                subject,
-                start
-            )
+                sent_notifications.add(
+                    key
+                )
+
+                print(
+                    f"Надсилаю повідомлення про початок: "
+                    f"{number} пара — {subject}"
+                )
+
+                send_lesson_started_notification(
+                    number,
+                    subject,
+                    start
+                )
+
+    # ======================================================
+    # ОЧИЩЕННЯ СТАРИХ КЛЮЧІВ
+    # ======================================================
 
     today_prefix = (
         now.date().isoformat()
@@ -1717,7 +1793,9 @@ scheduler.add_job(
     "interval",
     seconds=30,
     id="lesson_notifications",
-    replace_existing=True
+    replace_existing=True,
+    max_instances=1,
+    coalesce=True
 )
 
 scheduler.start()
